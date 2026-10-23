@@ -1747,9 +1747,11 @@ subroutine linstart
 
   end if
 
+  !$OMP PARALLEL WORKSHARE
   amat=-dtd2*amat
   bmat=-dtd2*bmat
   cmat=-dtd2*cmat
+  !$OMP END PARALLEL WORKSHARE
 
 ! put in l.h.s. of equation
 
@@ -1834,9 +1836,12 @@ subroutine linstart
   yt=0.0_IDP
   do i=n_start,n_end
      mnum3=noeqn*mnumn(i)
-     do l1t=1,mnum3
+     ! every radial point j updates its own rows of yt; l1t innermost runs along
+     ! the columns of the blocks (same summation order as l1t-l2t-j)
+     !$OMP PARALLEL DO PRIVATE(l1t,l2t,imt1,imt2,imat)
+     do j=1,mjm1
         do l2t=1,mnum3
-           do j=1,mjm1
+           do l1t=1,mnum3
               imt1=l1t+mnum3*(j-1)+nskpxn(i)
               imt2=l2t+mnum3*(j-1)+nskpxn(i)
               imat=l1t+mnum3*(l2t-1+mnum3*(j-1))+nskpn(i)
@@ -1846,6 +1851,7 @@ subroutine linstart
            end do
         end do
      end do
+     !$OMP END PARALLEL DO
   end do
 
 ! u-dlpersq(phi)=0
