@@ -4,141 +4,62 @@ MODULE matrix
 
   IMPLICIT NONE
 
-  PUBLIC  :: decbt, solbt
-  PRIVATE :: dec, sol
+  ! Block-tridiagonal solver for the toroidal families, on top of BLAS/LAPACK.
+
+  ! decbt replaces the diagonal blocks by their inverses, so that the solves
+  ! in every time step (solbt) are matrix-vector products only.
+
+  PUBLIC  :: decbt, solbt, wtime
+  PRIVATE :: lu_inverse
+
+  ! accumulated wall-clock time (s) of the family loops around decbt and solbt
+  real(IDP), PUBLIC :: t_decbt = 0., t_solbt = 0.
 
 CONTAINS
 
-  subroutine dec (n, a, ip, ier)
+  function wtime ()
+
+    ! wall-clock time in seconds
 
     implicit none
 
-    integer :: n, ier
-    integer, dimension(:) :: ip
-    real(IDP), dimension(:,:) :: a
+    real(IDP) :: wtime
+    integer(8) :: clk, rate
 
-    !  matrix triangularization by gauss elimination with partial pivoting.
-    !  input..
-    !     n = order of matrix.
-    !     ndim = declared first dimension of array  a.
-    !     a = matrix to be triangularized.
-    !  output..
-    !     a(i,j), i.le.j = upper triangular factor, u .
-    !     a(i,j), i.gt.j = multipliers = lower triangular factor, i - l.
-    !     ip(k), k.lt.n = index of k-th pivot row.
-    !     ier = 0 if matrix a is nonsingular, or k if found to be
-    !           singular at stage k.
-    !  row interchanges are finished in u, only partly in l.
-    !  use  sol  to obtain solution of linear system.
-    !  if ier .ne. 0, a is singular, sol will divide by zero.
-    ! ----------------------------------------------------------------------
-    !  reference!  a. c. hindmarsh, l. j. sloan, k. w. fong, and
-    !              g. h. rodrigue,
-    !              dec/sol!  solution of dense systems of linear
-    !              algebraic equations,
-    !              lawrence livermore laboratory report ucid-30137,
-    !              june 1976.
+    call system_clock(clk, rate)
+    wtime = real(clk,IDP)/real(rate,IDP)
 
-    integer :: nm1, kp1, i, j, k, m
-    real(IDP) :: t
-    ier = 0
-    if (n > 1) then
-       nm1 = n - 1
-       do k = 1,nm1
-          kp1 = k + 1
-          !  find the pivot in column k.  search rows k to n. --------------------
-          m = k
-          do i = kp1,n
-             if (abs(a(i,k)) > abs(a(m,k))) m = i
-          end do
-          ip(k) = m
-          !  interchange elements in rows k and m. -------------------------------
-          t = a(m,k)
-          if (m /= k) then
-             a(m,k) = a(k,k)
-             a(k,k) = t
-          end if
-          if (t == 0.) then
-             ier = k
-             return
-          end if
-          !  store multipliers in a(i,k), i = k+1,...,n. -------------------------
-          t = 1./t
-          do i = kp1,n
-             a(i,k) = -a(i,k)*t
-          end do
-          !  apply multipliers to other columns of a. ----------------------------
-          do j = kp1,n
-             t = a(m,j)
-             a(m,j) = a(k,j)
-             a(k,j) = t
-             if (t == 0.) cycle
-             do i = kp1,n
-                a(i,j) = a(i,j) + a(i,k)*t
-             end do
-          end do
-       end do
-    end if
-    if (a(n,n) == 0.) ier = n
+  end function wtime
 
-  end subroutine dec
+  subroutine lu_inverse (m, a, ip, w)
 
-  subroutine sol (n, a, b, ip)
+    ! Replace the LU factors in a (from dgetrf, pivots ip) by the inverse matrix,
+    ! computed by solving with the identity as right-hand side (dgetrs scales
+    ! better over many threads than dgetri). w is m by m workspace.
 
     implicit none
 
-    integer :: n
-    integer, dimension(:) :: ip
-    real(IDP), dimension(:,:) :: a
-    real(IDP), dimension(:) :: b
+    integer :: m, i, j, info
+    integer, dimension(m) :: ip
+    real(IDP), dimension(m,m) :: a, w
+    external :: dgetrs
 
-    !  solution of linear system a*x = b using output of dec.
-    !  input..
-    !     n = order of matrix.
-    !     ndim = declared first dimension of array  a.
-    !     a = triangularized matrix obtained from dec.
-    !     b = right hand side vector.
-    !     ip = pivot information vector obtained from dec.
-    !  do not use if dec has set ier .ne. 0.
-    !  output..
-    !     b = solution vector, x .
-
-    !  reference!  a. c. hindmarsh, l. j. sloan, k. w. fong, and
-    !              g. h. rodrigue,
-    !              dec/sol!  solution of dense systems of linear
-    !              algebraic equations,
-    !              lawrence livermore laboratory report ucid-30137,
-    !              june 1976.
-
-    integer :: nm1, kp1, i, k, m, kb, km1
-    real(IDP) :: t
-    if (n > 1) then
-       nm1 = n - 1
-       !  apply row permutations and multipliers to b. ------------------------
-       do k = 1,nm1
-          kp1 = k + 1
-          m = ip(k)
-          t = b(m)
-          b(m) = b(k)
-          b(k) = t
-          do i = kp1,n
-             b(i) = b(i) + a(i,k)*t
-          end do
+    !$OMP PARALLEL DO
+    do j = 1,m
+       w(:,j) = 0.
+       w(j,j) = 1.
+    end do
+    !$OMP END PARALLEL DO
+    call dgetrs ('N', m, m, a, m, ip, w, m, info)
+    !$OMP PARALLEL DO
+    do j = 1,m
+       do i = 1,m
+          a(i,j) = w(i,j)
        end do
-       !  back solve. ---------------------------------------------------------
-       do kb = 1,nm1
-          km1 = n - kb
-          k = km1 + 1
-          b(k) = b(k)/a(k,k)
-          t = -b(k)
-          do i = 1,km1
-             b(i) = b(i) + a(i,k)*t
-          end do
-       end do
-    end if
-    b(1) = b(1)/a(1,1)
+    end do
+    !$OMP END PARALLEL DO
 
-  end subroutine sol
+  end subroutine lu_inverse
 
   subroutine decbt (m, n, a, b, c, ip, ier)
 
@@ -158,9 +79,9 @@ CONTAINS
     !             february 1977
     ! the input matrix contains three blocks of elements in each block-row,
     ! including blocks in the (1,3) and (n,n-2) block positions.
-    ! decbt uses block gauss elimination and subroutines dec and sol
-    ! for solution of blocks.  partial pivoting is done within
-    ! block-rows only.
+    ! decbt uses block gauss elimination, with LAPACK dgetrf/dgetrs for the
+    ! diagonal blocks and BLAS dgemm for the block products. partial pivoting
+    ! is done within block-rows only.
     ! input..
     !     m = order of each block.
     !     n = number of blocks in each direction of the matrix.
@@ -176,96 +97,56 @@ CONTAINS
     !    ip = integer array of length m*n for working storage.
     ! output..
     ! a,b,c = m by m by n arrays containing the block lu decomposition
-    !         of the input matrix.
+    !         of the input matrix, with the diagonal blocks replaced by
+    !         their inverses.
     !    ip = m by n array of pivot information.  ip(*,k) contains
     !         information for the k-th digonal block.
     !   ier = 0  if no trouble occurred, or
     !       = -1 if the input value of m or n was illegal, or
     !       = k  if a singular matrix was found in the k-th diagonal block.
     ! use solbt to solve the associated linear system.
-    ! decbt calls subroutines  dec(m,m0,a,ip,ier)  and  sol(m,m0,a,y,ip)
-    ! for solution of m by m linear systems.
 
-    integer :: nm1, nm2, km1, i, j, k, l
-    real(IDP) :: dp
+    integer :: nm1, nm2, k, info
+    real(IDP), parameter :: one = 1.0_IDP, mone = -1.0_IDP
+    real(IDP), dimension(:,:), allocatable :: work
+    external :: dgetrf, dgetrs, dgemm
 
+    ier = 0
     if (m > 0 .and. n > 3) then
        nm1 = n - 1
        nm2 = n - 2
+       allocate (work(m,m))
        ! process the first block-row. -----------------------------------------
-       call dec (m, a(:,:,1), ip(:,1), ier)
-       if (ier /= 0) then
+       call dgetrf (m, m, a(1,1,1), m, ip(1,1), info)
+       if (info /= 0) then
           ier = 1
           return
        end if
-       !$OMP PARALLEL DO
-       do j = 1,m
-          call sol (m, a(:,:,1), b(:,j,1), ip(:,1))
-          call sol (m, a(:,:,1), c(:,j,1), ip(:,1))
-       end do
-       !$OMP END PARALLEL DO
+       call dgetrs ('N', m, m, a(1,1,1), m, ip(1,1), b(1,1,1), m, info)
+       call dgetrs ('N', m, m, a(1,1,1), m, ip(1,1), c(1,1,1), m, info)
+       call lu_inverse (m, a(1,1,1), ip(1,1), work)
        ! adjust b(*,*,2). -----------------------------------------------------
-       !$OMP PARALLEL DO PRIVATE(dp) COLLAPSE(2)
-       do j = 1,m
-          do i = 1,m
-             dp = 0.
-             do l = 1,m
-                dp = dp + c(i,l,2)*c(l,j,1)
-             end do
-             b(i,j,2) = b(i,j,2) - dp
-          end do
-       end do
-       !$OMP END PARALLEL DO
+       call dgemm ('N', 'N', m, m, m, mone, c(1,1,2), m, c(1,1,1), m, one, b(1,1,2), m)
        ! main loop.  process block-rows 2 to n-1. -----------------------------
        do k = 2,nm1
-          km1 = k - 1
-          !$OMP PARALLEL DO PRIVATE(dp) COLLAPSE(2)
-          do j = 1,m
-             do i = 1,m
-                dp = 0.
-                do l = 1,m
-                   dp = dp + c(i,l,k)*b(l,j,km1)
-                end do
-                a(i,j,k) = a(i,j,k) - dp
-             end do
-          end do
-          !$OMP END PARALLEL DO
-          call dec (m, a(:,:,k), ip(:,k), ier)
-          if (ier /= 0) then
+          call dgemm ('N', 'N', m, m, m, mone, c(1,1,k), m, b(1,1,k-1), m, one, a(1,1,k), m)
+          call dgetrf (m, m, a(1,1,k), m, ip(1,k), info)
+          if (info /= 0) then
              ier = k
              return
           end if
-          !$OMP PARALLEL DO
-          do j = 1,m
-             call sol (m, a(:,:,k), b(:,j,k), ip(:,k))
-          end do
-          !$OMP END PARALLEL DO
+          call dgetrs ('N', m, m, a(1,1,k), m, ip(1,k), b(1,1,k), m, info)
+          call lu_inverse (m, a(1,1,k), ip(1,k), work)
        end do
        ! process last block-row and return. -----------------------------------
-       !$OMP PARALLEL DO PRIVATE(dp) COLLAPSE(2)
-       do j = 1,m
-          do i = 1,m
-             dp = 0.
-             do l = 1,m
-                dp = dp + b(i,l,n)*b(l,j,nm2)
-             end do
-             c(i,j,n) = c(i,j,n) - dp
-          end do
-       end do
-       !$OMP END PARALLEL DO
-       !$OMP PARALLEL DO PRIVATE(dp) COLLAPSE(2)
-       do j = 1,m
-          do i = 1,m
-             dp = 0.
-             do l = 1,m
-                dp = dp + c(i,l,n)*b(l,j,nm1)
-             end do
-             a(i,j,n) = a(i,j,n) - dp
-          end do
-       end do
-       !$OMP END PARALLEL DO
-       call dec (m, a(:,:,n), ip(:,n), ier)
-       if (ier /= 0) ier = n
+       call dgemm ('N', 'N', m, m, m, mone, b(1,1,n), m, b(1,1,nm2), m, one, c(1,1,n), m)
+       call dgemm ('N', 'N', m, m, m, mone, c(1,1,n), m, b(1,1,nm1), m, one, a(1,1,n), m)
+       call dgetrf (m, m, a(1,1,n), m, ip(1,n), info)
+       if (info /= 0) then
+          ier = n
+          return
+       end if
+       call lu_inverse (m, a(1,1,n), ip(1,n), work)
     else
        ier = -1
     end if
@@ -295,61 +176,34 @@ CONTAINS
     !         (treated as an m by n array here).
     ! output..
     !     y = solution vector, of length m*n.
-    ! solbt makes calls to subroutine sol(m,m0,a,y,ip)
-    ! for solution of m by m linear systems.
+    ! the diagonal blocks hold their inverses (from decbt), so solbt only
+    ! needs matrix-vector products (BLAS dgemv).
 
-    integer :: nm1, nm2, km1, i, j, k, kp1, kb
-    real(IDP) :: dp
+    integer :: nm1, nm2, k, kb
+    real(IDP), parameter :: zero = 0.0_IDP, one = 1.0_IDP, mone = -1.0_IDP
+    real(IDP), dimension(m) :: tmp
+    external :: dgemv
+
     nm1 = n - 1
     nm2 = n - 2
     ! forward solution sweep. ----------------------------------------------
-    call sol (m, a(:,:,1), y(:,1), ip(:,1))
+    tmp = y(:,1)
+    call dgemv ('N', m, m, one, a(1,1,1), m, tmp, 1, zero, y(1,1), 1)
     do k = 2,nm1
-       km1 = k - 1
-       !$OMP PARALLEL DO PRIVATE(dp)
-       do i = 1,m
-          dp = 0.
-          do j = 1,m
-             dp = dp + c(i,j,k)*y(j,km1)
-          end do
-          y(i,k) = y(i,k) - dp
-       end do
-       !$OMP END PARALLEL DO
-       call sol (m, a(:,:,k), y(:,k), ip(:,k))
+       call dgemv ('N', m, m, mone, c(1,1,k), m, y(1,k-1), 1, one, y(1,k), 1)
+       tmp = y(:,k)
+       call dgemv ('N', m, m, one, a(1,1,k), m, tmp, 1, zero, y(1,k), 1)
     end do
-    !$OMP PARALLEL DO PRIVATE(dp)
-    do i = 1,m
-       dp = 0.
-       do j = 1,m
-          dp = dp + c(i,j,n)*y(j,nm1) + b(i,j,n)*y(j,nm2)
-       end do
-       y(i,n) = y(i,n) - dp
-    end do
-    !$OMP END PARALLEL DO
-    call sol (m, a(:,:,n), y(:,n), ip(:,n))
+    call dgemv ('N', m, m, mone, c(1,1,n), m, y(1,nm1), 1, one, y(1,n), 1)
+    call dgemv ('N', m, m, mone, b(1,1,n), m, y(1,nm2), 1, one, y(1,n), 1)
+    tmp = y(:,n)
+    call dgemv ('N', m, m, one, a(1,1,n), m, tmp, 1, zero, y(1,n), 1)
     ! backward solution sweep. ---------------------------------------------
     do kb = 1,nm1
        k = n - kb
-       kp1 = k + 1
-       !$OMP PARALLEL DO PRIVATE(dp)
-       do i = 1,m
-          dp = 0.
-          do j = 1,m
-             dp = dp + b(i,j,k)*y(j,kp1)
-          end do
-          y(i,k) = y(i,k) - dp
-       end do
-       !$OMP END PARALLEL DO
+       call dgemv ('N', m, m, mone, b(1,1,k), m, y(1,k+1), 1, one, y(1,k), 1)
     end do
-    !$OMP PARALLEL DO PRIVATE(dp)
-    do i = 1,m
-       dp = 0.
-       do j = 1,m
-          dp = dp + c(i,j,1)*y(j,3)
-       end do
-       y(i,1) = y(i,1) - dp
-    end do
-    !$OMP END PARALLEL DO
+    call dgemv ('N', m, m, mone, c(1,1,1), m, y(1,3), 1, one, y(1,1), 1)
 
   end subroutine solbt
 
