@@ -7,6 +7,7 @@ CONTAINS
   subroutine blockj(tx,itx,ieqn,ivar,ith,ir,izt,coef)
 
     use param
+!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use var_para
     use cotrol
     use domain
@@ -18,8 +19,9 @@ CONTAINS
     integer :: itx,ieqn,ivar,ith,ir,izt
     real(IDP) :: coef,x
     real(IDP), dimension(0:,0:) :: tx
-    real(IDP), dimension(mj) :: xa
+    real(IDP), dimension(mj) :: xa, rinvp
     integer :: ity,iph,ich,i,mnum3,l,m,n,l1,l2,l3,l1t,l2t,lp,lpp,lpn,ibnd,j,imat,il
+    integer :: nt,id,j0,j1
 
     ity= 1
     if (ivar == 2 .or. ivar == 4 .or. ivar == 6 .or. ivar == 7 .or. ivar == ivalp .or. ivar > iq) ity=-1
@@ -27,6 +29,18 @@ CONTAINS
     ity=ity*(-1)**(ith+izt)
     ich=itx*ity
     if (ieqn == 2 .or. ieqn == 4 .or. ieqn == 6 .or. ieqn == 7 .or. ieqn == ivalp .or. ieqn > iq) ich=-ich
+    do j=1,mjm1
+       rinvp(j)=rinv(j)**ith
+    end do
+    ! the radial points are split over the threads: thread id updates only the
+    ! blocks j0:j1 (in the order of the serial loop)
+    !$OMP PARALLEL PRIVATE(nt,id,j0,j1,i,mnum3,l2t,l,l2,m,n,ibnd,l1t,lp,lpp,l1,lpn,l3,x,il,xa,j,imat)
+    nt=1
+    id=0
+!$  nt=omp_get_num_threads()
+!$  id=omp_get_thread_num()
+    j0=id*mjm1/nt+1
+    j1=(id+1)*mjm1/nt
     do i=n_start,n_end
        mnum3=noeqn*mnumn(i)
        do l2t=1,mnumn(i)
@@ -56,21 +70,22 @@ CONTAINS
                 end do
                 if (x == 0.) cycle
                 x=x*iph
-                do j=1,mjm1
-                   xa(j)=x*(rinv(j))**ith
+                do j=j0,j1
+                   xa(j)=x*rinvp(j)
                 end do
                 if (ir == 0) then
-                   do j=1,mjm1
+                   do j=j0,j1
                       imat=l1+mnum3*(l2-1+mnum3*(j-1))+nskpn(i)
                       amat(imat)=amat(imat)+xa(j)*tx(j,l3)
                    end do
                 else if (ir == 1) then
-                   do j=1,mjm2
+                   do j=j0,min(mjm2,j1)
                       imat=l1+mnum3*(l2-1+mnum3*(j-1))+nskpn(i)
                       amat(imat)=amat(imat)+wt10(j,ibnd)*xa(j)*tx(j,l3)
                       cmat(imat)=cmat(imat)+wt1m(j,ibnd)*xa(j)*tx(j,l3)
                       bmat(imat)=bmat(imat)+wt1p(j,ibnd)*xa(j)*tx(j,l3)
                    end do
+                   if (j1 < mjm1) cycle
                    imat=l1+mnum3*(l2-1+mnum3*mjm2)+nskpn(i)
                    if ((ivar > 4 .and. ivar < 8) .or. (alpha_on == 1 .and. (ivar == 8 .or. ivar == 9))) then
                       ! if ((ivar == 5 .and. lln(l) == l0) .or. ivar == 6 .or. ivar == 7 .or. &
@@ -92,12 +107,13 @@ CONTAINS
                       bmat(imat)=bmat(imat)+wt1p(mjm1,1)*xa(mjm1)*tx(mjm1,l3)
                    end if
                 else
-                   do j=1,mjm2
+                   do j=j0,min(mjm2,j1)
                       imat=l1+mnum3*(l2-1+mnum3*(j-1))+nskpn(i)
                       amat(imat)=amat(imat)+wt20(j,ibnd)*xa(j)*tx(j,l3)
                       cmat(imat)=cmat(imat)+wt2m(j,ibnd)*xa(j)*tx(j,l3)
                       bmat(imat)=bmat(imat)+wt2p(j,ibnd)*xa(j)*tx(j,l3)
                    end do
+                   if (j1 < mjm1) cycle
                    imat=l1+mnum3*(l2-1+mnum3*mjm2)+nskpn(i)
                    if ((ivar > 4 .and. ivar < 8) .or. (alpha_on == 1 .and. (ivar == 8 .or. ivar == 9))) then
                       ! if ((ivar == 5 .and. lln(l) == l0) .or. ivar == 6 .or. ivar == 7 .or. &
@@ -123,6 +139,7 @@ CONTAINS
           end do
        end do
     end do
+    !$OMP END PARALLEL
 
   end subroutine blockj
 
@@ -627,6 +644,7 @@ CONTAINS
   subroutine b2lx(tx,itx,ieqn,ivar,ith,ir,izt,coef)
 
     use param
+!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     use var_para
     use cotrol
     use domain
@@ -638,8 +656,9 @@ CONTAINS
     integer :: itx,ieqn,ivar,ith,ir,izt
     real(IDP) :: coef,x
     real(IDP), dimension(0:,0:) :: tx
-    real(IDP), dimension(mj) :: xa
+    real(IDP), dimension(mj) :: xa, rinvp
     integer :: ity,iph,ich,i,mnum2,mnum3,l,m,n,l1,l2,l3,l1t,l2t,l1p,l2p,lp,lpp,lpn,ibnd,j,imt1,imt2,il
+    integer :: nt,id,j0,j1
 
     ity= 1
     if (ivar == 2 .or. ivar == 4 .or. ivar == 6 .or. ivar == 7 .or. ivar == ivalp .or. ivar > iq) ity=-1
@@ -647,6 +666,18 @@ CONTAINS
     ity=ity*(-1)**(ith+izt)
     ich=itx*ity
     if (ieqn == 2 .or. ieqn == 4 .or. ieqn == 6 .or. ieqn == 7 .or. ieqn == ivalp .or. ieqn > iq) ich=-ich
+    do j=1,mjm1
+       rinvp(j)=rinv(j)**ith
+    end do
+    ! the radial points are split over the threads: thread id updates yt only
+    ! at the points j0:j1 (contiguous slices of yt, in the order of the serial loop)
+    !$OMP PARALLEL PRIVATE(nt,id,j0,j1,i,mnum3,l2t,l,l2,m,n,ibnd,l1t,lp,lpp,l1,lpn,l3,x,il,xa,j,imt1,imt2)
+    nt=1
+    id=0
+!$  nt=omp_get_num_threads()
+!$  id=omp_get_thread_num()
+    j0=id*mjm1/nt+1
+    j1=(id+1)*mjm1/nt
     do i=n_start,n_end
        mnum3=noeqn*mnumn(i)
        do l2t=1,mnumn(i)
@@ -676,27 +707,30 @@ CONTAINS
                 end do
                 if (x == 0.) cycle
                 x=x*iph
-                do j=1,mjm1
-                   xa(j)=x*(rinv(j))**ith
+                do j=j0,j1
+                   xa(j)=x*rinvp(j)
                 end do
                 if (ir == 0) then
-                   do j=1,mjm1
+                   do j=j0,j1
                       imt1=l1+mnum3*(j-1)+nskpxn(i)
                       imt2=l2+mnum3*(j-1)+nskpxn(i)
                       yt(imt1)=yt(imt1)+xa(j)*tx(j,l3)*xt(imt2)
                    end do
                 else if (ir == 1) then
-                   imt1=l1+nskpxn(i)
-                   imt2=l2+nskpxn(i)
-                   yt(imt1)=yt(imt1)+wt10(1,ibnd)*xa(1)*tx(1,l3)*xt(imt2)
-                   yt(imt1)=yt(imt1)+wt1p(1,ibnd)*xa(1)*tx(1,l3)*xt(imt2+mnum3)
-                   do j=2,mjm2
+                   if (j0 == 1) then
+                      imt1=l1+nskpxn(i)
+                      imt2=l2+nskpxn(i)
+                      yt(imt1)=yt(imt1)+wt10(1,ibnd)*xa(1)*tx(1,l3)*xt(imt2)
+                      yt(imt1)=yt(imt1)+wt1p(1,ibnd)*xa(1)*tx(1,l3)*xt(imt2+mnum3)
+                   end if
+                   do j=max(2,j0),min(mjm2,j1)
                       imt1=l1+mnum3*(j-1)+nskpxn(i)
                       imt2=l2+mnum3*(j-1)+nskpxn(i)
                       yt(imt1)=yt(imt1)+wt10(j,ibnd)*xa(j)*tx(j,l3)*xt(imt2)
                       yt(imt1)=yt(imt1)+wt1m(j,ibnd)*xa(j)*tx(j,l3)*xt(imt2-mnum3)
                       yt(imt1)=yt(imt1)+wt1p(j,ibnd)*xa(j)*tx(j,l3)*xt(imt2+mnum3)
                    end do
+                   if (j1 < mjm1) cycle
                    imt1=l1+mnum3*mjm2+nskpxn(i)
                    imt2=l2+mnum3*mjm2+nskpxn(i)
                    if ((ivar > 4 .and. ivar < 8) .or. (alpha_on == 1 .and. (ivar == 8 .or. ivar == 9))) then
@@ -716,17 +750,20 @@ CONTAINS
                       yt(imt1)=yt(imt1)+wt1m(mjm1,1)*xa(mjm1)*tx(mjm1,l3)*xt(imt2-mnum3)
                    end if
                 else
-                   imt1=l1+nskpxn(i)
-                   imt2=l2+nskpxn(i)
-                   yt(imt1)=yt(imt1)+wt20(1,ibnd)*xa(1)*tx(1,l3)*xt(imt2)
-                   yt(imt1)=yt(imt1)+wt2p(1,ibnd)*xa(1)*tx(1,l3)*xt(imt2+mnum3)
-                   do j=2,mjm2
+                   if (j0 == 1) then
+                      imt1=l1+nskpxn(i)
+                      imt2=l2+nskpxn(i)
+                      yt(imt1)=yt(imt1)+wt20(1,ibnd)*xa(1)*tx(1,l3)*xt(imt2)
+                      yt(imt1)=yt(imt1)+wt2p(1,ibnd)*xa(1)*tx(1,l3)*xt(imt2+mnum3)
+                   end if
+                   do j=max(2,j0),min(mjm2,j1)
                       imt1=l1+mnum3*(j-1)+nskpxn(i)
                       imt2=l2+mnum3*(j-1)+nskpxn(i)
                       yt(imt1)=yt(imt1)+wt20(j,ibnd)*xa(j)*tx(j,l3)*xt(imt2)
                       yt(imt1)=yt(imt1)+wt2m(j,ibnd)*xa(j)*tx(j,l3)*xt(imt2-mnum3)
                       yt(imt1)=yt(imt1)+wt2p(j,ibnd)*xa(j)*tx(j,l3)*xt(imt2+mnum3)
                    end do
+                   if (j1 < mjm1) cycle
                    imt1=l1+mnum3*mjm2+nskpxn(i)
                    imt2=l2+mnum3*mjm2+nskpxn(i)
                    if ((ivar > 4 .and. ivar < 8) .or. (alpha_on == 1 .and. (ivar == 8 .or. ivar == 9))) then
@@ -750,6 +787,7 @@ CONTAINS
           end do
        end do
     end do
+    !$OMP END PARALLEL
 
   end subroutine b2lx
 

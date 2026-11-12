@@ -9,18 +9,41 @@ CONTAINS
 
     use param
     use domain
+!$  use omp_lib, only: omp_get_num_threads, omp_get_thread_num
     implicit none
 
-    integer :: gtype, htype
+    integer :: gtype, htype, nj, nt, id, j0, j1
 
     real(IDP) :: c1,c2
     real(IDP), dimension(0:,0:) :: g,h,f
 
-    if (nminb < 0) then
-       call multcb (f, g, h, gtype, htype, c1, c2)
-    else
-       call multrb (f, g, h, gtype, htype, c1, c2)
+    ! The convolution is independent for every radial point (first index), so
+    ! the radial points are split over the threads.
+    nj = size(f,1)
+    if (size(g,1) /= nj .or. size(h,1) /= nj) then
+       if (nminb < 0) then
+          call multcb (f, g, h, gtype, htype, c1, c2)
+       else
+          call multrb (f, g, h, gtype, htype, c1, c2)
+       end if
+       return
     end if
+
+    !$OMP PARALLEL PRIVATE(nt, id, j0, j1)
+    nt = 1
+    id = 0
+!$  nt = omp_get_num_threads()
+!$  id = omp_get_thread_num()
+    j0 = id*nj/nt
+    j1 = (id+1)*nj/nt - 1
+    if (j1 >= j0) then
+       if (nminb < 0) then
+          call multcb (f(j0:j1,:), g(j0:j1,:), h(j0:j1,:), gtype, htype, c1, c2)
+       else
+          call multrb (f(j0:j1,:), g(j0:j1,:), h(j0:j1,:), gtype, htype, c1, c2)
+       end if
+    end if
+    !$OMP END PARALLEL
 
   end subroutine multb
 
@@ -68,8 +91,8 @@ CONTAINS
 
     real(IDP) :: c1,c2
     real(IDP), dimension(0:,0:) :: g,h,f
-    real(IDP), dimension(0:mj,-mmaxb:mmaxb) :: fr,fi
-    real(IDP), dimension(0:mj,0:mxmbandb,0:nmaxb) :: gr,gi,hr,hi
+    real(IDP), dimension(0:size(g,1)-1,-mmaxb:mmaxb) :: fr,fi
+    real(IDP), dimension(0:size(g,1)-1,0:mxmbandb,0:nmaxb) :: gr,gi,hr,hi
 
     !   arrange zero column of g and h so that references ll(m,n) that
     !   return zero will produce g(i,ll(m.n)) = 0.0, etc., and initialize
@@ -371,8 +394,8 @@ CONTAINS
 
     real(IDP) :: c1,c2
     real(IDP), dimension(0:,0:) :: g,h,f
-    real(IDP), dimension(0:mj,-mmaxxb:mmaxxb) :: fr,fi
-    real(IDP), dimension(0:mj,0:mxmbandb,0:nmaxb) :: gr,gi,hr,hi
+    real(IDP), dimension(0:size(g,1)-1,-mmaxxb:mmaxxb) :: fr,fi
+    real(IDP), dimension(0:size(g,1)-1,0:mxmbandb,0:nmaxb) :: gr,gi,hr,hi
 
     !   arrange zero column of g and h so that references ll(m,n) that
     !   return zero will produce g(i,ll(m.n)) = 0.0, etc., and initialize
