@@ -27,6 +27,7 @@ subroutine linstart
                xsii,xsie,xsi2,xsi3,xsi4,ztr,zti,zir,zii,zer,zei,vther,vthir,tauie,xnuelc,xnuion,fctr,rsq
   complex(IDP) :: zetai,zetae,zetai2,zetai3,zetai4,zi,y0i,y1i,y2i,ddii,zetae2,zetae3,zetae4,ze,y0e,y1e,y2e,ddee,rei,sei, &
                   stfe,stfi,reii,sei1,sei2,sei3,zetaiinv,zetaeinv,cmplx1
+  real(IDP) :: t0
   real(IDP), dimension(:), allocatable :: xa
   real(IDP), dimension(:,:), allocatable :: scp2,scp3
   character*1 :: tb
@@ -396,9 +397,21 @@ subroutine linstart
   cmapm=0.
   cmapp=0.
 
-  amat=0.
-  bmat=0.
-  cmat=0.
+  ! first touch of the block matrices from the threads that stream them in
+  ! solbt_all (memory placement on multi-socket machines)
+  if (myPE <= numPElm1) then
+     do it=n_st(myPE),n_nd(myPE)
+        loca=nskpn(it)+1
+        mnum3=noeqn*mnumn(it)
+        call bt_zero(mnum3,mjm1,amat(loca:))
+        call bt_zero(mnum3,mjm1,bmat(loca:))
+        call bt_zero(mnum3,mjm1,cmat(loca:))
+     end do
+  else
+     amat=0.
+     bmat=0.
+     cmat=0.
+  end if
 
   ipc=0
   xt=0.
@@ -1902,6 +1915,7 @@ subroutine linstart
   !    end do
   ! end do
 
+  t0=wtime()
   do it=n_start,n_end
      loca=nskpn(it)+1
      loci=nskpin(it)+1
@@ -1912,6 +1926,7 @@ subroutine linstart
         stop 19
      end if
   end do
+  t_decbt=t_decbt+wtime()-t0
 
   ! call cpu_time(time_em)
   ! write(6,'(/"Time spent in writing matrices:",1pe13.6," seconds")') time_em-time_sm
