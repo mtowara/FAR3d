@@ -1,0 +1,681 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>FAR3d Block Solver Speed-up</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single reading column in a white report sheet under a navy nAG masthead; wide figures break out to the sheet width. */
+:root {
+  --bg: #eef2f8;
+  --sheet: #ffffff;
+  --ink: #182841;        /* nAG navy (logo) */
+  --text: #2b3445;
+  --muted: #5d6879;
+  --rule: #d8dee8;
+  --blue: #063f87;       /* nAG blue */
+  --blue-soft: #c6daf6;
+  --row-odd: #e9edf4;
+  --row-hi: #d0d8e8;
+  --before: #a3adbc;
+  --good: #1d7a4c;
+  --code-bg: #f1f4f9;
+  --mast: #182841;
+  --mast-fg: #ffffff;
+  --mast-sub: #b9c7de;
+  --f-display: "Montserrat", "Segoe UI", Arial, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", Helvetica, Arial, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1322; --sheet: #111c2f; --ink: #e4ebf6; --text: #c8d2e1; --muted: #8e9bb0;
+    --rule: #26344c; --blue: #86adeb; --blue-soft: #1d3459; --row-odd: #152238; --row-hi: #1f3150;
+    --before: #56647b; --good: #5cc28f; --code-bg: #0d1626; --mast: #0f1d36; --mast-fg: #ffffff; --mast-sub: #9fb1cf;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1322; --sheet: #111c2f; --ink: #e4ebf6; --text: #c8d2e1; --muted: #8e9bb0;
+  --rule: #26344c; --blue: #86adeb; --blue-soft: #1d3459; --row-odd: #152238; --row-hi: #1f3150;
+  --before: #56647b; --good: #5cc28f; --code-bg: #0d1626; --mast: #0f1d36; --mast-fg: #ffffff; --mast-sub: #9fb1cf;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font: 17px/1.6 var(--f-body); }
+
+.mast { background: var(--mast); color: var(--mast-fg); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 40px; }
+.mast-in { max-width: 980px; margin: 0 auto; display: grid; gap: 22px; }
+.logo { display: block; width: 132px; aspect-ratio: 360 / 114; max-width: 100%; background: var(--mast-fg);
+  -webkit-mask: url(data:image/png;base64,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) no-repeat center / contain;
+          mask: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAByCAQAAADU1oMXAAAWeElEQVR42u2dedwUxZnHv9Xd74vcouKBUTxAxTMs3jcaj0+M0c3GMwbReB9xjYlxvbIbXT8eaxajifFYo2swiSExajzWxFsjKOKJQlADqHi8HAICr293V+0f3TPMTFfNdM30+wJ56+k/+PDOTHd11a9+9Vz1FGzLS8RIVAuXJGYKWyLwcOJklcorKOKW4KxQRCgec4B2sqpFoJAFwFChWMpmfIZAuW51sqrEQxXEqh6R42cnqx7QokC2d+JklQPaiRMHaCdOHKCdOHGAduLEAdqJA7QTJw7QTpw4QDtx4gDtxIkDtBMHaCdOHKCdOHGAduLEAdqJEwdoJw7QTpysmRK4LugBEelGCoVAIlsiIFGxkSL+h9juJtJ3Kr1XskuV5t7NAbq7xQdi4ipQyianRJT5pdf09PC1f1UtTTfbyemlk1IZWijSagQO0KsNmCUxMJid2Zmt6M/fuYNZlhuJBT5ROiU2ZxSbMRSPTmbxJAuahLSommI9r+h6ROW1ajAbsj5DGEiAZDmL6OBjOsotDFD5W1vUHm2FYCEjWeh2fVeAWQH7cyKHsFH574sYy+uInDBMwAyCvTmSA9mGPhWffsyp/KlJSO/FuqiqfaASj9eY2+xin7tfSqvA1uzJnuzI5qybseUW8z7TmcxzvEZY1Z85oFjEJVEsYB3cVtkSDAGO4Om0f2JCQiI6UTyV0xgv3WUI5/JyuaeTOyWXYgUjrauheMCGfKEdx/uNykgxYBYplC9mCmHFc2Oi9J2imioxM7iBveqqSQ7QPWJo78cTac9EFXWpJJKILXNAugTmi/kg/WWYqXDVheIma8UxAM5H0UlUdYWErGB4N/m+vPSNDuI+OsvlicJU9dDV4ooqID+Zk+mXD9QO0MUbOpvwyzLv1PZUjOKQBgOT3KWNs5iTDry+tlWM5I0qv0fe9eP1tNpV9RWiuKRbLKvkbQ/k8fKT8pafiwnTb87kVPwKnneA7iFuPpOOlJn1RdMkX6sDaJHe5bBUzQjrDLxE8QkDrHrdB/Y1lH+LUfyNNuspkkd1Gs7E8iS3r6RYooYXGVtWmxyge0BvHsmjZa4zDY1iHyOgk79uwyQUik666g6+RNHBYGtA321sYYzi0LL2XsyaBXAS8w0rlj2oJ9C33iriAF3csJ3IQhQr6DLyqkTRyaZajklg1IdLWZJ+cyXIzJNjDn0sel0AG7C46v7VSofk9wUahj7QL1XAwgJwFhOjmMb2Zkg7QBczbH25NdeAKKZrtcCSljmtrJr8lVu4h0VG8CVa8AtWfR4A360DLoliOZsUZBgmqsaLqaKlCrpCFJ9xuKmNxQF6PkN6JaADYEteQKFYyANcyngu41Ot9R4iuSXDLonePJgbUzaew5Vsl362GVOMLB2iuN3KiBN4vFqX9UMU/1aIYegDOzAn9cbUw05U4YrUue50E1lxmt5hWRygO9m0F1aIDoD96EDxLt9nWPnvx2r9CDGKw2qW9KTHDuZtFIp3OJfBZZi3A6P4Qjs5EvB9xwJ8PrB3g3rgMYoZtLVMTD6wE582sCdCY1tknc+Se76ReoNqRBa4EJwBtPc6OB+HIuLHDEkHMqAPAbtoVIUYxTz6V61jAdCH65AoFnJZCuagPFQe8Hodjh5poR74wJ0NtdkYxUEtGoYeMIKPtJNa1bg0F/ACd3El53MG5/IjbuEvqe/d7CsKUZyln8qKsMbBbnslHsUYyQdsALQR9MjlrRZwvgDFY+yY/l+U/x2vAU5YEwgR6bKcqCuTGFl1l5XQeF4LjAjFVAsXmwCG8lkdnXxlK+9tyTD0EAxhhhHOJZjO5qccwlDNHQawG5cytUrFqNYHlrC+XsG9rxB+jtKZPY1te9y3sOocdXAtKzglA0Mf+IMG0JKY0WWolBxan6H4iHEaMCfPCHhHy9AhikstFI4AOFvbquz/l7Fx0/2bWAQPG1eCBJ5TOIEBFRNbT1X7c2/Ze1/95hP1U07Qn0vYu2kTQKDowyj6prm+Hiv4Lc+yotvhFDGFuaswFcrD53r24Chm40FFgpCHYlPeZq0aBonxeJqxaTKRT0w7EzgTeIhzmF2RtlP5FMmWvE1bTSJRsrbGbM/M3MlJAsFURhM35N6IgB9yLQFRU9pzzCVcSUibRh+Q+MzlMu5GkWTS6ZKOBAIvffpeXMFYqDg6ReJxIE/idVfO4Bb8LOWQuDDnTONrEQfSnak0jf2511bEB6uZ8CoNP0WocowwAIbzDIqYS7R3oczY39FyXYTkCUv9eU/tCHVmlvQYxVuZ1SL/c8YQaR11iWl7F+ulrCxy3C0Z3/PoLHN7jOJtc+sEQboPovmLVJeMU+u0Va08z/VFqkGuak3a03DLYI3TLkLyKj4iXZL35X0U8zgU9NZ6+e5/NmrQ37L0cNyRmRoRikt5AlkD9BjFgU0YhgIfn6lGD0/M2XWmr6nlHrA7s9O7higupltz+T3agEfr2LTFXzGS9/BXqedbd0JNAJyj6YkIxdFAQAB8mxUoXmLLugPjIdhaG/6OUXxY4y9ptKKslwnSSCRfMIjTM0APUfymifXPB83dSs/q5HCNnZBH2oAv8UbqyV/BZt1tQQUIvtbDgFbMWsWA1uupbczUMJ7kNfx0Cb0kzT0e2IBnAuB6LTxCFFdZGoRnZsYnRPEAMKwm2J7A73OGWcJGIBjEvMzbJ36NLr6aQrNZj9IGvIVC8mD3q5oeMJKooUuoWEC/s9oBOgD+2cDP30iVjZ+iUNyOaDAsAsE6zNcEVRK228ICbolBWNuuCMVXAV26UojiAsuFveTG1E/Ab7cA5xL7b8EnKL5ezknsVkCPIOz1gPaAZ7TAmYKHwOPuNGOsnua8Eh7nGeFxnwVL+cBuGYMw6cF2PGA/7adv5jLcKidNX2Zr+DlC8d8twrnUI1/nfat0LAfoljhEsLvGkxClSf19+AMKxTWQAyqCgOlav0SM4mALk80HbtNy8OVAmyHlP0axv8VTAuAozeoUo3iddqvJUQ9n2/UUMzlA+8BvtJ6EJ4G+PFxm58aD6yM4yAjn6RamlQDWYaFGS+5kc8Arb8rKAn6ixTrgAQ9rgtUxsk4GeDMOUwfoHvN5bEFnRueNUeyJzyMoFHfktPN94PdGheNcS4PwNKNBWOrBDVmagbxiKRvm1NQ9YGOWZxAQoZhUqBHnOUD3nEF4nZafH6CUYvBgzoCCB2yumRwqTWJa1+K9PUSak1zbf4eXFQofuEfL0efnnDoBMF6bdxEzutA9MI6he8xhN4QODT9HjOJmFIpp9M8ZCgqAK438fKOlQbiLNnDyHn3KYTEfwdiMghOheD2n7usDE7XT+QnWwBqKDtABcK7Wv3EXV6AI+YThOYEoEPTnA60GLQkZZQGRAPiFlnv/vYp7BT5van0d++bk14BZmd+HKMZ3v5PNAbqnAiqSZfwRRRcxY3PrvQFwgjHgbRNWEMAQ5msNwurqIHofcoji7hzP84At6NJo4cuswzMO0KtxQCWBRIji+xZmnAe8YMyHOMAC0AFwinbd+BPZfTPD+LxGZZIoFrNBw172gUO1Kstfm4Jza3lFDtDdFFBZOaz3Y5NGJAx5cRGSl7UZJHZTI0JxREYR0DsdQxTfbdj6UgZL9rcTWCNLgvZuQJsCKiUv7Ies1zAuWA2sewwpo4px2GXYjdG6Ef/OWhk+8xEcqGXZVxtOogC4WgvoU60BLWh211MbgSunW4wovkdlCnrlJx6nMB8/ZzK6R8xwjkRl1AqJx1wmWZTCFcDJCKIqSEk8fkVnJn0/RvA0bzOq6j18JDuxJ881fIP1tTQ3B7tqph6SCRxO1ISjT7DUMXQxAZURhp3ZEYpbrTgqAP7T6LC7yOJeAlg7LUtWmzI6QqvZBsAPtDx7ZwO93Qd+l/mlRLGLlQ6d7Htc1gIuHKALUDjgBi0EYyRzGWSh9QoEA/lIm4ApWcRQC8MnAE7S6M+Shw0gS6J9yzS+is8YWrenfeB+rQ2xnRWgS2muXcRNXdIdGtS6w04ylHEaFSEpA38OSyx2PvoojmVDjfISI/hfOvBy30tCuoG3tsW3G0Am8fmQh6BKuRBEDObohr4VaYR6fpEITiLJRGzmckZhIQ67i4wm3H2WQ5rkvUlNADlRFISVaTk6U7Q2qYa3lpHn9SlREYppddcZvSErUeyJXVRzZ0NRnXzXCsfQrfJzTD/OQmWAphAs43yrfek+ioPYQcP2MYI/8o7F8ROJQVi7L1oCv6IT39CqGHgys5PcRzKa3bWr0Mqnfabl7A0s/Rvjmz7/RQGfO0C3qj8rjmETjYog8biO2fgWJ6Ao4HytV8BDcb1Vsn3EYI7JsKNPyF1G9SD5RsSdmW+Y1JdK+Uj7PiPIv+8xYhBH0UpmXodTOVplaL2KECOZQ3+rIIiPYCdtZftSRrWdcTVOaxA+2uA+yQkEyzWG4aK0/EC957WSUR0Ax6fbYBtfekQ84hi6Nf1ZcSg7IDNDphBcxjILEy751Xna4ikCuN5q6krgVO0EvJM22usWWOvDhzyWMQxj1q7DngqYlfnUA3alLacKIYEzSbLFmwlxK2C6Y+hW3/pJ7ZZYySv4lkFqwcaZXIqVJ6n4llX6d9IahDNy3mGXTEnb+pX0kjIJ2ULqEsk/5eLoZJv1PD7NeelLOxznIoWt6M+S3dhPw88guJTYSn/2iDiN/jVRvYR5PG4gtijMJYCT8DT3WsqF+MiGk6ONFQyoKj/mIxnDrkzRRgwVgvm8xe41vRET8C9MyzEZJTCXbXL3+6M1dovCo5OpjqFbAbQuOpZw2fPYV7QYqK1okeSCDLCsMjqQjwsfixDFbUa2DYBrM72RuAn7FnwMEdyqfdK04jzRvQ/QHoKt6NKqCIqvWNrq+n1/JRj9CNvg+QmGzD9ZUyvffOmL2ps3f/nAAYYd7yfmbn9j3dnHYxOWZfo9RPFfLrDSWkDlZwZ+fgbbHOBkv4g+4L2UYVY1/Dzg6W6pYhWhOM0ATgH0Za5mz4tkFn0KKWJQ6vebNf0eo9jbAboVft6QxRp+jlAcbMnPPhgKqZVOUfGtRmKHQg/pqX63F42TK0Cf0xIVWFwxiX+GGsVMMbPJeqkO0OngXG4YvOes+dkDntACWhKzk9We6QD4SUGHqOmzu3cxTDBP61tJ6tqtYHtaL2WQFEafqlFsijvqqFcCWiAYYDDhFAdZ87MwZDBEKB7DNv1yAB912ziEKH5hfD8PeMxYO6lvy+lDbcAEbakEyeLcFUQcoLUseLqhJOOz1t1qPts1riiRnr9lx3VjFdj6x/eVDEP95t6k3IzXEpzPMGaKT6DQrV69jaED3jIUJTzEkp+TUPMyg7dkRho3s1NeZDeWNY7qHiVnLtBesgaaK1EvKoL5UqOWLWajYovf9yZAB8ARBn5+wZqfA+A/jLxzvhXvJKUMI+2Bn81edm+ZGG2RoQ2KibQ3waSJh+SsVIc3HRVaaG2m3gRo0w7vyFpBKJWUeV9j5pj2iXgNJsd13WYQVmqsY4zv6dcxSkMUz6X1QPKXgAyAdiYY4ByhmE6fUpqBC303E/Deg30yAe8Yj2k8bHkyk0/EEXxJczJVTMDv6KgJNNfbqCqI6M/xGtDH3MayJia+QDKaA2qCzDEBJ/Oy4X4Sn8s4jK00KbUBEXsxhQu5I3V9yjrJW4kKESPZgwnsSqzJjUkm2Cl8YZVm4Bi6hoF+a3DYfdOaIhK2l4aSMntXOeyS4dyVgXX4+RhtyuhTLbzvppntvxJFB2sbe94HdiU0+MKT1j3O2PK3g/QopZVrlpeeRAMwgpuJjWZul+VZjQ7QmoDKlpqqoBGSN9PzxOx6TZ8BnRRTbK94u2TIrmFS+agzvUEmNUVlvoXPWk1VumgnOUIze8+T6sAoSDXerrrnyD7O8ayTcTpWejXG8ks+L/eHXoVJSvgIB+jmDcKfGPh5nDVTmIMgIYpfl/XUxCgawZ9R7F4nrDGKMJO+qfiYgU33UgB8Qwvo+ulXQeox7jL6SpJ2fsy9nM0eDGOtMozXYyeO52ZmGA5GruyjVxhoSSIO0DUm3Dos0NQikrxTUZw2fxCkn6HGaFId1Kc99dx6nMtyZHqqoQlCVxdejCs5N2VOpo3VhzzrY3qJd72rjgNwJVQ/Zw5v8DKv8i4Lq7hc1oHzrBYOcHaATmHxrwZ+Pqspfj7csJyGKK4uf/MQnkfxQZ1UeYGgn8ZbkoTOW3Fp6QvflKpUB3VNOpFWjJZ1PCaR9vNIk69R+/yZbE63He/WGwAtELTzN+0ZhB9YZSyvNJ4mIg2pmpKPOJjhHJmezPIUGzfQWr+pVQ2eaZHDPEjTZGtVmU8YXLf3Ey/FTSjihkdmy8piMQ2/G6J4kWF042mFvQHQppK5IYoLaaYk4UA+bdBjnem/P6e97vB5wP9pDcJxtOoD8IBHm7p3AukLkAX6xhMl5F4G0K2Hb/YGQHvAUxlASyQdDGmKnw812u8rWUuxJC0g4NVt2dYGFh3Ucg+Z2b9x3kqiS3+F93LxtMrFzV1c2DDE5ACdK/w6RpO/EaK4ogkWNB97XKnKKF7iyzQ6Bi4ArmpCz7UxDJvXzwNgPe5Ip0HcEpgVk9kNusez0dsADXdoil0liYv2iTECU5X+lcMnuYY+DSGZAG6uFnBfLmRhbtWDkrTgYKaUj1GSlmOd9NI8zsPvmfj2PzqgPWAjlmp3sk1oAjQCGJw5+6Sai6ayT66l1ewrfq6ghdkDtmnJx52oHh7jeLnCadfY/IvKk2geP04rULtzCgsyCC/S8vNyhjfBz0kYJNbUsUiesIAf0JYzBuYBj2iNtvGFsZk5CnlC7mf46Z0O5740/lfatBuV/RuJ3RARVrntJnM261bcwwG6AC0yYCYRXUQVVyeS/2mqmz1gTFVvyXKgYTk3sUnu4UuO6FxOV1XSZxchHQ3carYT+mgUnVVP6STkcSvOLL3RZpzO/cxrMMaLeZbLGVNug8jXUCeNhyHiWLYiW/oQrrOqL1oSBcxlBX0J8VKjzwfm82t+zgwgIM6Vt+chuYC+mk8msdiiOE19iRE8xIKUJyvRcwC7Mzn3gRsxAg/FbG7hFgaxLTuyHVuwEYPoj4eik6V8yhxm8hpvlAtABsT53qRYQKseBlpPPU8Cm/KXGi6SBExmhkWJ28qW+3TwPa6nX/qXj3mJ+3mQT0lSVPMCMcJjORNrCvpKPG5EFJZSqfBYxg85oCbRNcZnmOWdYpKC5pIlTGZymRza8VBEdNXo3tKiNwpbrj0kI3i7B70OEsFsRhI3xZBFqiOqhV8OZwz9WcJc3mVJOrCq2Mze1eBN6wVeBKSqVyWaPM1fc+tGRXFlB5+zdrqEdr/EtLMASZCjUlsRh8kIY0J7K6w3hzlVwxg3Vexb76WOCwagKvw5quJtRcVf5eowpX3g1Dq5VcVfC8tJ4muueGmCu7eanFi+xoso9F6Kbdm+Rxha0MWLvE8/NmvwFgp4j0431E6ac9717POuaFiDIkJxmfPn9BYpdphlsUdrNYRzF0Mb+joUMNQNtAN0s5CWPdr2MIdBogjdQDslYU2xAUQh33HiAO3EiQO0EycO0E6cOEA7cYB24sQB2okTB2gnThygnThxgHbiAO3EiQO0EycO0E6cFCxrepZwKeu50TecOECvEdKOoK3uN9qAdjfQDtBrAjvDdOZrTpCqlBif6eBYunfI/wOzXROqQqZkWwAAAABJRU5ErkJggg==) no-repeat center / contain; }
+.eyebrow { font: 600 12px/1.4 var(--f-display); letter-spacing: .14em; text-transform: uppercase; color: var(--mast-sub); }
+.mast h1 { font: 700 clamp(28px, 4.6vw, 44px)/1.15 var(--f-display); margin: 6px 0 10px; text-wrap: balance; letter-spacing: -.01em; }
+.mast p { margin: 0; max-width: 66ch; color: var(--mast-sub); }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 14px; color: var(--mast-sub); }
+.meta b { color: var(--mast-fg); font-weight: 600; }
+
+.wrap { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 56px; }
+.sheet { max-width: 980px; margin: -18px auto 0; background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding-block: 36px 48px; padding-inline: clamp(18px, 5vw, 64px); }
+section { display: grid; gap: 14px; }
+section + section { margin-top: 44px; padding-top: 36px; border-top: 1px solid var(--rule); }
+.prose { max-width: 68ch; }
+h2 { font: 700 26px/1.25 var(--f-display); color: var(--ink); margin: 0; text-wrap: balance; }
+h2 .num { color: var(--blue); margin-right: .4em; }
+h3 { font: 600 18px/1.35 var(--f-display); color: var(--ink); margin: 14px 0 0; text-wrap: balance; }
+p { margin: 0; }
+.prose p + p { margin-top: 10px; }
+code, .mono { font-family: var(--f-mono); font-size: .86em; }
+code { background: var(--code-bg); padding: .08em .35em; border-radius: 3px; }
+pre { background: var(--code-bg); border: 1px solid var(--rule); border-radius: 4px; padding: 12px 14px; margin: 0; overflow-x: auto; font: 13px/1.55 var(--f-mono); color: var(--text); }
+ul { margin: 0; padding-left: 1.2em; }
+li + li { margin-top: 6px; }
+.note { font-size: 14.5px; color: var(--muted); }
+strong { color: var(--ink); }
+
+/* headline figures */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.kpi { background: var(--sheet); padding: 16px 18px; display: grid; gap: 2px; align-content: start; }
+.kpi .lab { font: 600 11.5px/1.3 var(--f-display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.kpi .val { font: 700 30px/1.15 var(--f-display); color: var(--ink); font-variant-numeric: tabular-nums; }
+.kpi .val small { font-size: 15px; color: var(--good); margin-left: 6px; }
+.kpi .from { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* tables in the nAG beamer style: navy head, banded rows */
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; font-variant-numeric: tabular-nums; }
+th { background: var(--mast); color: var(--mast-fg); font: 600 13px/1.3 var(--f-display); text-align: left; padding: 9px 12px; white-space: nowrap; }
+td { padding: 8px 12px; border-top: 1px solid var(--rule); vertical-align: top; }
+tbody tr:nth-child(odd) td { background: var(--row-odd); }
+td.r, th.r { text-align: right; white-space: nowrap; }
+tr.hi td { background: var(--row-hi) !important; font-weight: 600; color: var(--ink); }
+caption { caption-side: bottom; text-align: left; padding: 8px 12px; font-size: 13.5px; color: var(--muted); }
+
+/* to-scale bars */
+.bars { display: grid; gap: 14px; }
+.bar-row { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 4px 14px; align-items: center; }
+.bar-row .name { font: 600 14px/1.3 var(--f-display); color: var(--ink); }
+.bar-stack { display: grid; gap: 4px; min-width: 0; }
+.bar { height: 20px; border-radius: 2px; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font: 600 12px/1 var(--f-mono); white-space: nowrap; min-width: 0; }
+.bar.b { background: var(--before); color: var(--ink); }
+.bar.a { background: var(--blue); color: var(--sheet); }
+.bar.tiny { justify-content: flex-start; padding-left: 0; background: transparent; position: relative; }
+.bar.tiny::before { content: ""; width: var(--w); height: 100%; background: var(--blue); border-radius: 2px; flex: none; }
+.bar.tiny span { padding-left: 6px; color: var(--ink); }
+.legend { display: flex; gap: 18px; font-size: 13.5px; color: var(--muted); flex-wrap: wrap; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+@media (max-width: 560px) { .bar-row { grid-template-columns: 1fr; } }
+
+/* steps list */
+.steps { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+.step { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 6px 24px; padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.step h4 { margin: 0 0 4px; font: 600 16px/1.35 var(--f-display); color: var(--ink); }
+.step p { font-size: 15.5px; }
+.gain { font: 600 14px/1.4 var(--f-mono); color: var(--good); text-align: right; font-variant-numeric: tabular-nums; }
+.gain span { display: block; font: 400 12.5px/1.4 var(--f-body); color: var(--muted); }
+@media (max-width: 640px) { .step { grid-template-columns: 1fr; } .gain { text-align: left; } }
+
+figure { margin: 0; display: grid; gap: 10px; }
+figcaption { font-size: 14px; color: var(--muted); max-width: 72ch; }
+.svgbox { overflow-x: auto; }
+.svgbox svg { display: block; width: 100%; min-width: 620px; height: auto; }
+svg text { font-family: var(--f-body); }
+.math { font-family: var(--f-mono); font-size: 16px; }
+
+/* animation */
+.anim { border: 1px solid var(--rule); border-radius: 4px; padding: 14px; display: grid; gap: 12px; background: var(--sheet); }
+.controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+button, select { font: 600 13.5px/1 var(--f-display); color: var(--ink); background: var(--sheet); border: 1px solid var(--blue); border-radius: 3px; padding: 8px 12px; cursor: pointer; }
+button.primary { background: var(--blue); color: var(--sheet); }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+label.sel { font-size: 14px; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+.phase { font-size: 15px; min-height: 3.2em; color: var(--text); }
+.phase b { color: var(--ink); }
+
+/* nPerform introduction */
+.npf { border: 1px solid var(--rule); border-left: 4px solid var(--blue); border-radius: 4px; background: var(--code-bg); padding: 16px 20px; margin-bottom: 36px; display: grid; gap: 8px; }
+.npf h2 { font-size: 18px; }
+.npf p { font-size: 15.5px; }
+
+/* branch stack: one commit per branch, drawn as a chain */
+.chain { display: grid; gap: 0; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+.link { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 4px 14px; padding: 12px 16px 12px 12px; border-top: 1px solid var(--rule); background: var(--sheet); }
+.link:first-child { border-top: 0; }
+.link.base { background: var(--code-bg); }
+.link .dot { width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--blue); background: var(--sheet); margin: 5px auto 0; }
+.link.base .dot { border-color: var(--muted); }
+.link.head .dot { background: var(--blue); }
+.link .bn { font: 600 14.5px/1.4 var(--f-mono); color: var(--ink); overflow-wrap: anywhere; }
+.link .bn span { font-weight: 400; color: var(--muted); margin-left: 8px; }
+.link p { font-size: 15px; grid-column: 2; }
+
+/* stacked time bars, to scale on a 300 s axis */
+.sbars { display: grid; gap: 14px; }
+.sbar-row { display: grid; gap: 4px; }
+.sbar-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 14px; }
+.sbar-head code { background: none; padding: 0; color: var(--ink); font-weight: 600; }
+.sbar-head .tot { font: 600 13.5px/1.4 var(--f-mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.sbar-row.ref .sbar-head { color: var(--muted); }
+.sbar { display: flex; height: 22px; background: var(--code-bg); border-radius: 2px; overflow: hidden; }
+.seg { flex: none; height: 100%; display: flex; align-items: center; justify-content: center; font: 600 11.5px/1 var(--f-mono); white-space: nowrap; overflow: hidden; }
+.seg.su { background: var(--before); color: var(--ink); }
+.seg.ls { background: var(--blue-soft); color: var(--ink); border-left: 1px solid var(--sheet); }
+.seg.ts { background: var(--blue); color: var(--sheet); border-left: 1px solid var(--sheet); }
+.axis { display: flex; justify-content: space-between; font: 12px/1 var(--f-mono); color: var(--muted); border-top: 1px solid var(--rule); padding-top: 5px; }
+@media (max-width: 560px) { .seg { font-size: 0; } }
+.tag { display: inline-block; font: 600 11px/1.4 var(--f-display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--rule); border-radius: 3px; padding: 1px 6px; margin-left: 6px; vertical-align: 2px; }
+.foot { background: var(--mast); color: var(--mast-sub); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 36px 44px; }
+.foot-in { max-width: 980px; margin: 0 auto; display: grid; gap: 10px; }
+.foot h2 { font: 700 22px/1.2 var(--f-display); color: var(--mast-fg); margin: 0; }
+.foot p { margin: 0; max-width: 66ch; }
+.foot ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.foot a { color: var(--mast-fg); text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.foot .lbl { display: inline-block; min-width: 13ch; color: var(--mast-sub); }
+</style>
+
+<header class="mast">
+  <div class="mast-in">
+    <a class="logo" href="https://nag.com" target="_blank" rel="noopener" aria-label="nAG website"></a>
+    <div>
+      <div class="eyebrow">nPerform Engineering Report</div>
+      <h1>Speeding up FAR3d's block-tridiagonal solver</h1>
+      <p>Performance work on the implicit solve of the FAR3d MHD code on a 32-core dual-socket Xeon server.</p>
+    </div>
+    <div class="meta">
+      <span>Updated <b>11 November 2026</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap"><main class="sheet">
+
+<aside class="npf" aria-label="About nPerform">
+  <h2>About this report</h2>
+  <p>This report is the result of an <strong>nPerform</strong> engagement. nPerform is a service offering which builds on our expertise in numerical software and software engineering while exploiting the possibilities of rapid iteration afforded by AI.</p>
+  <p>All steps are performed or augmented by AI, while being supervised, guided and sanity checked by experienced personnel.</p>
+</aside>
+
+<section>
+  <h2>Result on a 32-core server, all 32 threads</h2>
+  <p class="prose">Example case, 50 time steps, run with <code>OMP_NUM_THREADS=32</code> on a dual-socket Xeon (2&times;16 cores). Intel compiler build (ifx 2026.2, MKL). Before: <code>nag_fix_rearrange_loop_order</code>, the first delivered branch. After: <code>nag_fully_tuned</code>.</p>
+  <div class="kpis">
+    <div class="kpi"><span class="lab">Total run time</span><span class="val">34 s<small>7.5&times;</small></span><span class="from">from 4 min 11 s</span></div>
+    <div class="kpi"><span class="lab">Time per time step</span><span class="val">388 ms<small>4.6&times;</small></span><span class="from">from 1769 ms</span></div>
+    <div class="kpi"><span class="lab">Matrix factorisation (linstart)</span><span class="val">10.2 s<small>14.2&times;</small></span><span class="from">from 145.3 s</span></div>
+    <div class="kpi"><span class="lab">Setup (input, equilibrium)</span><span class="val">2.8 s<small>5.8&times;</small></span><span class="from">from 16.3 s</span></div>
+  </div>
+  <p class="note">Mean of two runs each, one process without <code>mpirun</code>, 32 pinned threads, <code>-xHost</code>. Results agree to within 1e-8 relative in all text outputs (section 4). With gfortran the same pair takes 4 min 23 s and 39 s; the next section has both compilers.</p>
+</section>
+
+<section>
+  <h2>Delivered as five stacked branches</h2>
+  <div class="prose">
+    <p>The work is delivered as five branches, each building on the previous one, so every step can be reviewed and measured on its own. They start from the upstream branch <code>Nonlinear_helical_couplings</code> plus one commit that adds wall-clock timers. Unlike the development branches, they <strong>keep MPI</strong> in the code and the build. For a single node, <code>far3d.x</code> is started directly as one MPI process, without <code>mpirun</code>, and all parallelism comes from OpenMP threads.</p>
+    <p>Every branch has the CMake option <code>FAR3D_MARCH_NATIVE</code>, which compiles for the build machine's CPU (<code>-march=native</code>, or <code>-xHost</code> with the Intel compiler). It was added to the first branch and merged up through the others. It is off by default, because the executable may not run on older CPUs.</p>
+  </div>
+
+  <div class="chain" role="list">
+    <div class="link base" role="listitem"><div class="dot"></div><div class="bn">Nonlinear_helical_couplings + timers<span>ad548b0</span></div><p>Upstream code. Prints setup, linstart and time-stepping times, and the accumulated <code>decbt</code> and <code>solbt</code> times.</p></div>
+    <div class="link" role="listitem"><div class="dot"></div><div class="bn">nag_fix_rearrange_loop_order<span>22a3fbf</span></div><p>Cache-friendly loop order for the block products in the built-in <code>decbt</code>. Bit-identical results; no BLAS or LAPACK. Adds <code>FAR3D_MARCH_NATIVE</code>.</p></div>
+    <div class="link" role="listitem"><div class="dot"></div><div class="bn">nag_lapack<span>d878cb8</span></div><p><code>decbt</code> uses <code>dgetrf</code>, <code>dgetrs</code> and <code>dgemm</code>; <code>solbt</code> uses <code>dgetrs</code> and <code>dgemv</code>. Backend chosen with <code>FAR3D_LAPACK</code> (MKL, Accelerate, reference LAPACK or NAG's NPC).</p></div>
+    <div class="link" role="listitem"><div class="dot"></div><div class="bn">nag_lapack_explicit_inverse<span>35705bd</span></div><p>Stores the inverse of each diagonal block, computed with <code>dgetrs</code> on the identity, so each time step needs only matrix-vector products.</p></div>
+    <div class="link" role="listitem"><div class="dot"></div><div class="bn">nag_panelized<span>1d60bad</span></div><p>Column-panel solve over all OpenMP threads, with one barrier per block row; A&#8342;&#8315;&#185;C&#8342; stored; NUMA-aware first touch. The time step needs no BLAS.</p></div>
+    <div class="link head" role="listitem"><div class="dot"></div><div class="bn">nag_fully_tuned<span>3c862b0</span></div><p>Parallelises the serial loops that the faster solver exposed: the setup convolution <code>multb</code>, the block matrix-vector product and the scaling in <code>linstart</code>, and <code>blockj</code> and <code>b2lx</code> in every step. Bit-identical results. <strong>The version to use.</strong></p></div>
+  </div>
+
+  <h3>32 threads, one process, no <code>mpirun</code></h3>
+  <p class="prose">The bars show the Intel compiler build (ifx 2026.2, MKL with its Intel threading layer, <code>-xHost</code>), mean of two runs. The top bar is the untuned upstream code (<code>Nonlinear_helical_couplings</code> plus the timer commit), built the same way with <code>-xHost</code>. The table below gives the gfortran numbers; the ifx table follows in the next subsection.</p>
+  <div class="sbars" role="img" aria-label="Run time of each branch built with ifx, split into setup, linstart and 50 time steps, on a 0 to 300 second scale">
+    <div class="legend"><span><i class="sw" style="background:var(--before)"></i>Setup</span><span><i class="sw" style="background:var(--blue-soft)"></i>linstart (assembly and factorisation)</span><span><i class="sw" style="background:var(--blue)"></i>50 time steps</span></div>
+    <div class="sbar-row ref"><div class="sbar-head"><code>Nonlinear_helical_couplings</code> (upstream, untuned)<span class="tot">4:50</span></div><div class="sbar"><div class="seg su" style="width:5.53%">17 s</div><div class="seg ls" style="width:56.33%">169 s</div><div class="seg ts" style="width:34.57%">104 s</div></div></div>
+    <div class="sbar-row"><div class="sbar-head"><code>nag_fix_rearrange_loop_order</code><span class="tot">4:11</span></div><div class="sbar"><div class="seg su" style="width:5.43%">16 s</div><div class="seg ls" style="width:48.43%">145 s</div><div class="seg ts" style="width:29.48%">88 s</div></div></div>
+    <div class="sbar-row"><div class="sbar-head"><code>nag_lapack</code><span class="tot">2:11</span></div><div class="sbar"><div class="seg su" style="width:5.32%">16 s</div><div class="seg ls" style="width:18.95%">57 s</div><div class="seg ts" style="width:18.97%">57 s</div></div></div>
+    <div class="sbar-row"><div class="sbar-head"><code>nag_lapack_explicit_inverse</code><span class="tot">1:55</span></div><div class="sbar"><div class="seg su" style="width:5.36%">16 s</div><div class="seg ls" style="width:19.45%">58 s</div><div class="seg ts" style="width:13.34%">40 s</div></div></div>
+    <div class="sbar-row"><div class="sbar-head"><code>nag_panelized</code><span class="tot">1:38</span></div><div class="sbar"><div class="seg su" style="width:5.32%">16 s</div><div class="seg ls" style="width:19.55%">59 s</div><div class="seg ts" style="width:7.42%">22 s</div></div></div>
+    <div class="sbar-row"><div class="sbar-head"><code>nag_fully_tuned</code><span class="tot">0:34</span></div><div class="sbar"><div class="seg su" style="width:0.94%"></div><div class="seg ls" style="width:3.41%"></div><div class="seg ts" style="width:6.46%"></div></div></div>
+    <div class="axis"><span>0 s</span><span>100 s</span><span>200 s</span><span>300 s</span></div>
+  </div>
+
+  <div class="tbl"><table>
+    <thead><tr><th>Branch (50 steps, 32 threads)</th><th class="r">Setup</th><th class="r">linstart (<code style="background:none;color:inherit">decbt</code>)</th><th class="r">Per step (<code style="background:none;color:inherit">solbt</code>)</th><th class="r">Wall</th><th class="r">Wall, generic build</th></tr></thead>
+    <tbody>
+      <tr><td><code>nag_fix_rearrange_loop_order</code></td><td class="r">20.8 s</td><td class="r">145.8 s (94.3 s)</td><td class="r">1897 ms (1658 ms)</td><td class="r">4:23</td><td class="r">4:43</td></tr>
+      <tr><td><code>nag_lapack</code></td><td class="r">20.8 s</td><td class="r">56.7 s (5.4 s)</td><td class="r">3635 ms (3402 ms)</td><td class="r">4:20</td><td class="r">4:24</td></tr>
+      <tr><td><code>nag_lapack_explicit_inverse</code></td><td class="r">20.8 s</td><td class="r">58.8 s (7.1 s)</td><td class="r">1084 ms (849 ms)</td><td class="r">2:15</td><td class="r">2:19</td></tr>
+      <tr><td><code>nag_panelized</code></td><td class="r">21.0 s</td><td class="r">61.3 s (8.3 s)</td><td class="r">536 ms (292 ms)</td><td class="r">1:50</td><td class="r">1:54</td></tr>
+      <tr class="hi"><td><code>nag_fully_tuned</code></td><td class="r">3.6 s</td><td class="r">11.3 s (8.3 s)</td><td class="r">449 ms (296 ms)</td><td class="r">0:39</td><td class="r">0:40</td></tr>
+    </tbody>
+    <caption>Built with <code>-DFAR3D_MARCH_NATIVE=ON</code> (AVX-512 on this server); the last column is the same branch built without it. Mean of two runs per branch, runs within 0.7% of each other. gfortran 13.3, MKL 2026.1, Release build; <code>OMP_NUM_THREADS=32 OMP_PROC_BIND=close OMP_PLACES=cores numactl --localalloc ./far3d.x</code>, the same for every branch. Section 4 covers result accuracy.</caption>
+  </table></div>
+
+  <div class="prose">
+    <ul>
+      <li><strong><code>nag_fully_tuned</code> runs 6.8&times; faster than the loop-order branch: 39 s instead of 4 min 23 s.</strong> Each time step is 4.2&times; faster, <code>linstart</code> 12.9&times; and setup 5.8&times;. This matches the 39 s of the development branch <code>mt_solbt_panels</code>.</li>
+      <li><strong>The panels make the solve 2.9&times; faster than with explicit inverses alone.</strong> In <code>nag_panelized</code> the solve takes 292 ms per step, about 115 GB/s.</li>
+      <li><strong>With gfortran, LU through MKL alone makes the time step slower.</strong> <code>nag_lapack</code> takes 3.6 s per step, against 1.9 s for the built-in solver: MKL has to thread each small triangular solve on its own, and that does not scale to 32 threads (section 2). Explicit inverses make the step 3.4&times; faster again, and the panels a further 2.0&times;. With ifx this slowdown disappears (see the bars above and the next subsection).</li>
+      <li><strong>Up to <code>nag_panelized</code>, serial code outside the solver dominates.</strong> Those branches spend about 21 s in setup and about 50 s of <code>linstart</code> outside <code>decbt</code>. <code>nag_fully_tuned</code> parallelises these loops and cuts the run from 110 s to 39 s. Each step also gains 87 ms from <code>b2lx</code> and <code>blockj</code>.</li>
+      <li><strong><code>-march=native</code> gains 1&ndash;7%.</strong> The built-in solver gains most (7%), because its own loops get AVX-512. <code>nag_lapack</code> gains least (1%), since its time goes into MKL, which selects its own vector code. <code>nag_fully_tuned</code> gains 4%.</li>
+    </ul>
+  </div>
+
+  <h3>Intel compiler</h3>
+  <div class="prose">
+    <p>The same five branches were also built with the Intel Fortran compiler ifx 2026.2, with Intel MPI 2021.19 and MKL 2026.2 using MKL's Intel threading layer, so that MKL and FAR3d share one OpenMP runtime. Builds use <code>-O3 -xHost</code> (<code>FAR3D_MARCH_NATIVE=ON</code>), and runs use the same 32 pinned threads, again as one MPI process without <code>mpirun</code>. ifx puts large temporary arrays on the stack, so the stack limit has to be raised with <code>ulimit -s unlimited</code> before running. Otherwise every branch except <code>nag_fully_tuned</code> crashes during setup.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Branch, ifx (50 steps, 32 threads)</th><th class="r">Setup</th><th class="r">linstart (<code style="background:none;color:inherit">decbt</code>)</th><th class="r">Per step (<code style="background:none;color:inherit">solbt</code>)</th><th class="r">Wall</th><th class="r">Wall, gfortran</th></tr></thead>
+    <tbody>
+      <tr><td><code>Nonlinear_helical_couplings</code> (upstream)</td><td class="r">16.6 s</td><td class="r">169.0 s (107.0 s)</td><td class="r">2074 ms (1877 ms)</td><td class="r">4:50</td><td class="r">&ndash;</td></tr>
+      <tr><td><code>nag_fix_rearrange_loop_order</code></td><td class="r">16.3 s</td><td class="r">145.3 s (93.0 s)</td><td class="r">1769 ms (1584 ms)</td><td class="r">4:11</td><td class="r">4:23</td></tr>
+      <tr><td><code>nag_lapack</code></td><td class="r">16.0 s</td><td class="r">56.9 s (4.7 s)</td><td class="r">1138 ms (954 ms)</td><td class="r">2:11</td><td class="r">4:20</td></tr>
+      <tr><td><code>nag_lapack_explicit_inverse</code></td><td class="r">16.1 s</td><td class="r">58.3 s (6.1 s)</td><td class="r">800 ms (616 ms)</td><td class="r">1:55</td><td class="r">2:15</td></tr>
+      <tr><td><code>nag_panelized</code></td><td class="r">16.0 s</td><td class="r">58.7 s (7.3 s)</td><td class="r">445 ms (262 ms)</td><td class="r">1:38</td><td class="r">1:50</td></tr>
+      <tr class="hi"><td><code>nag_fully_tuned</code></td><td class="r">2.8 s</td><td class="r">10.2 s (7.3 s)</td><td class="r">388 ms (262 ms)</td><td class="r">0:34</td><td class="r">0:39</td></tr>
+    </tbody>
+    <caption>Mean of two runs per branch, runs within 1.3% of each other. The last column is the gfortran build with <code>-march=native</code> from the table above.</caption>
+  </table></div>
+  <div class="prose">
+    <ul>
+      <li><strong>With ifx, <code>nag_fully_tuned</code> takes 33.6 s, 13% less than with gfortran.</strong> Each step takes 388 ms instead of 449 ms, and setup and <code>linstart</code> are about 1 s shorter each.</li>
+      <li><strong>The panel solve vectorises better.</strong> It takes 262 ms per step, against 292 ms with gfortran, which is about 130 GB/s, or roughly 90% of the measured read bandwidth.</li>
+      <li><strong>MKL's own threading is far better with the Intel runtime.</strong> The LU solve of <code>nag_lapack</code> takes 954 ms per step instead of 3402 ms. MKL's Intel threading layer handles the many small <code>dgetrs</code> calls much better than its GNU threading layer, which the gfortran builds have to use. With ifx, LU is faster than the built-in solver, and the explicit inverses gain 1.4&times; rather than 3.4&times;. The panels are still the largest single step.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">1</span>The problem: a block-tridiagonal solve</h2>
+  <div class="prose">
+    <p>FAR3d advances the linearised MHD equations implicitly. Each time step solves a linear system whose matrix couples every radial grid point only to its two neighbours. Grouping all unknowns at one radial point into a block gives a <strong>block-tridiagonal</strong> matrix: blocks on the diagonal and the two off-diagonals, zero everywhere else. As assembled, the blocks are themselves sparse (4.6&ndash;10% nonzero), but the factors that the solver stores are dense, so the solver treats every block as a dense matrix.</p>
+    <p>The Fourier modes split into three <strong>toroidal families</strong> that do not couple, so there are three independent systems of this shape.</p>
+  </div>
+
+  <figure>
+    <div class="svgbox">
+    <svg viewBox="0 0 900 330" role="img" aria-label="Block-tridiagonal matrix with diagonal blocks A, sub-diagonal blocks C and super-diagonal blocks B, solved by a forward and a backward sweep">
+      <defs>
+        <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--sheet)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--rule)" stroke-width="2"/></pattern>
+      </defs>
+      <rect x="40" y="20" width="290" height="290" fill="url(#hatch)" stroke="var(--muted)" stroke-width="1"/>
+      <g id="btgrid"></g>
+      <text x="185" y="326" text-anchor="middle" font-size="13" fill="var(--muted)">n = 399 block rows (radial points)</text>
+      <g font-size="15" fill="var(--text)">
+        <text x="380" y="50" font-weight="600" fill="var(--ink)" font-size="16">Block row k:</text>
+        <text x="380" y="76" class="math" fill="var(--text)">C&#8342; x&#8342;&#8331;&#8321; + A&#8342; x&#8342; + B&#8342; x&#8342;&#8330;&#8321; = y&#8342;</text>
+        <text x="380" y="116" font-weight="600" fill="var(--ink)" font-size="16">decbt (once, in linstart): block LU</text>
+        <text x="380" y="140" class="math" fill="var(--text)">A&#8342; &#8592; A&#8342; &#8722; C&#8342; A&#8342;&#8331;&#8321;&#8315;&#185; B&#8342;&#8331;&#8321;,  then factor or invert A&#8342;</text>
+        <text x="380" y="180" font-weight="600" fill="var(--ink)" font-size="16">solbt (twice per time step)</text>
+        <text x="380" y="204" class="math" fill="var(--text)">forward:  y&#8342; &#8592; A&#8342;&#8315;&#185;(y&#8342; &#8722; C&#8342; y&#8342;&#8331;&#8321;),   k = 1 &#8230; n</text>
+        <text x="380" y="228" class="math" fill="var(--text)">backward: x&#8342; &#8592; y&#8342; &#8722; (A&#8342;&#8315;&#185;B&#8342;) x&#8342;&#8330;&#8321;,  k = n &#8230; 1</text>
+        <text x="380" y="270" font-size="14" fill="var(--muted)">Each sweep is sequential in k: row k needs the result of row k&#8722;1.</text>
+        <text x="380" y="292" font-size="14" fill="var(--muted)">All parallelism has to come from inside one block row.</text>
+      </g>
+    </svg>
+    </div>
+    <figcaption>Dashed outlines: block positions (1,3) and (n,n&#8722;2). The storage format of <code>decbt</code>/<code>solbt</code> (Hindmarsh&#8217;s algorithm) allows a block in each, for one-sided boundary differences. In the Example case both are exactly zero, so the matrix is strictly block-tridiagonal. Shown with 9 block rows; the real system has 399.</figcaption>
+  </figure>
+
+  <div class="tbl"><table>
+    <thead><tr><th>Toroidal family</th><th class="r">Block order m</th><th class="r">Block rows n</th><th class="r">Storage (A, B, C)</th></tr></thead>
+    <tbody>
+      <tr><td>Family 1 (11 equations &times; 93 modes)</td><td class="r">1023</td><td class="r">399</td><td class="r">9.3 GiB</td></tr>
+      <tr><td>Family 2 (11 &times; 70)</td><td class="r">770</td><td class="r">399</td><td class="r">5.3 GiB</td></tr>
+      <tr><td>Family 3 (11 &times; 32)</td><td class="r">352</td><td class="r">399</td><td class="r">1.1 GiB</td></tr>
+      <tr class="hi"><td>Total</td><td class="r"></td><td class="r"></td><td class="r">15.7 GiB</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="prose">
+    <p>This sets the two costs that matter:</p>
+    <ul>
+      <li><strong>The factorisation (<code>decbt</code>) is compute-bound.</strong> It runs once per run inside <code>linstart</code>, as dense LU factorisations and matrix products on blocks up to 1023&times;1023.</li>
+      <li><strong>The solve (<code>solbt</code>) is memory-bandwidth-bound.</strong> It runs twice per step (predictor and corrector) and reads all 15.7 GiB of factors each time, about 34 GB per step, with only two flops per number read. Its speed is set by how many bytes per second the cores can stream from memory.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">2</span>Why MKL did not scale on 32 cores</h2>
+  <div class="prose">
+    <p>On a dual-socket Xeon server, each variant was run with 1 to 32 threads. The built-in solver kept improving with threads, but both MKL variants stopped improving at 2&ndash;4 threads:</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Variant (50 steps)</th><th class="r">linstart, 1 thr</th><th class="r">linstart, 32 thr</th><th class="r">Stepping, 1 thr</th><th class="r">Stepping, best</th></tr></thead>
+    <tbody>
+      <tr><td>Built-in solver, original loop order</td><td class="r">1365 s</td><td class="r">188 s</td><td class="r">444 s</td><td class="r">122 s (32 thr)</td></tr>
+      <tr><td>Built-in solver, fixed loop order</td><td class="r">540 s</td><td class="r">167 s</td><td class="r">508 s</td><td class="r">122 s (16 thr)</td></tr>
+      <tr><td>MKL, LU (<code>dgetrs</code> every step)</td><td class="r">92.7 s</td><td class="r">77.1 s</td><td class="r">128 s</td><td class="r">93 s (2 thr)</td></tr>
+      <tr><td>MKL, explicit inverse</td><td class="r">144 s</td><td class="r">92.5 s</td><td class="r">132 s</td><td class="r">78 s (16 thr)</td></tr>
+    </tbody>
+    <caption>Setup took a constant ~22 s in every run. Threads were not pinned in these runs.</caption>
+  </table></div>
+  <div class="prose">
+    <p>Three causes explain this:</p>
+    <ul>
+      <li><strong>At most three threads did solver work.</strong> The OpenMP loop ran over the three families, so 29 of 32 threads sat idle in <code>decbt</code> and <code>solbt</code>.</li>
+      <li><strong>MKL went single-threaded inside that loop.</strong> MKL runs on one thread whenever it is called from inside an OpenMP parallel region. This holds even for a region switched off with <code>IF(.false.)</code>, because the nesting level is still above zero. So the 1023&times;1023 LU factorisations, which would scale well, ran on one core each.</li>
+      <li><strong>All memory sat on one socket.</strong> Linux places a page on the socket of the thread that first writes it. The block arrays were zeroed by one thread, so all 15.7 GiB landed on one socket and the other socket's threads read across the inter-socket link.</li>
+    </ul>
+    <h3>Turning the family loop off is not enough</h3>
+    <p>Solving the families one after another, outside any OpenMP region, lets MKL thread its own calls again. That fixes the factorisation, since <code>dgetrf</code> and <code>dgemm</code> on 1023&times;1023 blocks have plenty of work to share. Time stepping still did not scale well. With explicit inverses each solve step is a single <code>dgemv</code> on one block (at most 8 MB), and MKL has to split that small, memory-bound call afresh for every one of the ~2,400 blocks per sweep: it starts and joins its thread team each time, and the threads that read a block are not the ones whose socket holds it.</p>
+    <p>Time stepping therefore needs parallelism that the solver controls itself: a fixed split of every block over all threads, the same for every call, with each thread always reading the same part of memory. This is the column-panel scheme of section 3.</p>
+  </div>
+
+</section>
+
+<section>
+  <h2><span class="num">3</span>Column panels, tuned for 32 cores</h2>
+  <div class="prose">
+    <p>The development branch <code>mt_solbt_panels</code> parallelises <em>inside</em> each block row instead of across families. The changes below are listed with the gain each one brought, measured as it was added. They overlap, so they do not multiply to the total. The delivered branch <code>nag_panelized</code> contains the first five changes, and <code>nag_fully_tuned</code> adds the sixth. The last one is a build option on every <code>nag_*</code> branch.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step"><div><h4>Drop the parallel family loop</h4><p>Families now run one after another, so MKL is called outside any OpenMP region and threads each LU factorisation over all 32 cores. Made optional on <code>mt_blas_lapack</code> as <code>FAR3D_OMP_FAMILIES</code>, default off.</p></div><div class="gain">71 s &rarr; 12 s<span><code>decbt</code></span></div></div>
+    <div class="step"><div><h4>Column-panel <code>solbt</code></h4><p>Every thread streams its own slice of every block, so all 32 cores read memory at once (see the animation below).</p></div><div class="gain">2.4&times;<span>time stepping vs. parallel families</span></div></div>
+    <div class="step"><div><h4>NUMA-aware first touch</h4><p><code>bt_zero</code> zeroes each panel from the thread that will later stream it, so the panel lands on that thread's socket. Threads are pinned (<code>OMP_PROC_BIND=close</code>, <code>OMP_PLACES=cores</code>), and <code>numactl --localalloc</code> stops the kernel's automatic NUMA balancing from moving pages.</p></div><div class="gain">482 &rarr; 352 ms<span><code>solbt</code> per step</span></div></div>
+    <div class="step"><div><h4>Store A&#8342;&#8315;&#185;C&#8342; instead of C&#8342;</h4><p><code>decbt</code> premultiplies the sub-diagonal block, so each forward row is a single phase <code>y&#8342; = A&#8342;&#8315;&#185;y&#8342; &#8722; (A&#8342;&#8315;&#185;C&#8342;)y&#8342;&#8331;&#8321;</code> with one barrier instead of two. All three families share that barrier.</p></div><div class="gain">half the barriers<span>forward sweep</span></div></div>
+    <div class="step"><div><h4>Inverse by <code>dgetrs</code> on the identity</h4><p>MKL's <code>dgetri</code> scales badly to 32 threads (11 ms vs 3 ms at m = 1023). Solving against the identity with <code>dgetrs</code> gives the same inverse faster.</p></div><div class="gain">14 s &rarr; 8.4 s<span><code>decbt</code></span></div></div>
+    <div class="step"><div><h4>Parallelise the serial code exposed by the faster solver<span class="tag">nag_fully_tuned</span></h4><p>Each loop is split over radial points and gives bit-identical results: the setup convolution <code>multb</code>; a matrix-vector product in <code>linstart</code> with a stride-m&sup2; inner loop; <code>blockj</code>; and <code>b2lx</code> in every step.</p></div><div class="gain">22 s &rarr; 3 s<span>setup; linstart product ~45 s &rarr; &lt;1 s</span></div></div>
+    <div class="step"><div><h4><code>FAR3D_MARCH_NATIVE</code><span class="tag">all nag_*</span></h4><p>New CMake option for <code>-march=native</code>: AVX-512 for the panel kernels and other loops. Off by default because the binary may not run on older CPUs.</p></div><div class="gain">~6%<span>overall</span></div></div>
+  </div>
+
+  <p class="note">Tried without gain: <code>OMP_WAIT_POLICY=active</code>; 64 threads with hyper-threading (75% slower); a plain-Fortran panel kernel instead of MKL <code>dgemv</code> without <code>-march=native</code>. Solving the three families with a shared barrier and evening out panel sizes brought no measurable gain but were kept.</p>
+
+  <h3>The panel scheme, animated</h3>
+  <div class="prose">
+    <p>The example runs the forward sweep and then the backward sweep over 9 block rows with 64&times;64 blocks, cut into 8&times;8 tiles. The forward sweep streams two blocks per row (A&#8342;&#8315;&#185;C&#8342; and A&#8342;&#8315;&#185;); the backward sweep streams one (A&#8342;&#8315;&#185;B&#8342;). With 8 threads, each thread owns one column panel 8 columns wide. Panels are always whole multiples of 8 rows (one 64-byte cache line). Thread <i>t</i> owns columns i&#8320;:i&#8321; of both blocks <em>and</em> rows i&#8320;:i&#8321; of the vectors. The real blocks are up to 1023&times;1023, split over 32 threads, so each panel is about 32 columns wide.</p>
+  </div>
+  <div class="anim">
+    <div class="controls">
+      <button id="play" class="primary" type="button">Pause</button>
+      <button id="stepb" type="button">Next phase</button>
+      <label class="sel" for="nthr">Threads <select id="nthr"><option>2</option><option>4</option><option selected>8</option></select></label>
+    </div>
+    <div class="svgbox">
+      <svg id="pan" viewBox="0 0 920 500" role="img" aria-label="Animation of the column-panel matrix-vector products in one block row"></svg>
+    </div>
+    <p class="phase" id="phase" aria-live="polite"></p>
+  </div>
+  <div class="prose">
+    <ul>
+      <li><strong>Each thread reads only its own panels</strong>, which were first touched by the same thread and so live in its own socket's memory. In the default <code>close</code> placement, even threads sit on socket 0 and odd threads on socket 1.</li>
+      <li><strong>Each thread reads only the vector entries it wrote itself</strong> in the previous row. Only the small partial-sum buffers (m numbers per thread) cross between threads.</li>
+      <li><strong>One barrier per block row.</strong> The partial buffers are double-buffered, so the next row's products can start writing while slow threads still read the previous sums.</li>
+    </ul>
+    <p>With this scheme <code>solbt</code> reads its 34 GB per step in 262 ms with ifx, about <strong>130 GB/s</strong> (292 ms with gfortran). A simple OpenMP read test on this machine reaches about 140 GB/s, so the solve runs at roughly 90% of the memory bandwidth available.</p>
+  </div>
+
+  <h3>Result</h3>
+  <div class="bars" role="img" aria-label="Before and after bars for setup, linstart and 50 time steps, ifx builds">
+    <div class="legend"><span><i class="sw" style="background:var(--before)"></i><code>nag_lapack_explicit_inverse</code> (MKL, explicit inverses)</span><span><i class="sw" style="background:var(--blue)"></i><code>nag_fully_tuned</code></span></div>
+    <div class="bar-row"><span class="name">Setup</span><div class="bar-stack"><div class="bar b" style="width:27.5%">16.1 s</div><div class="bar tiny" style="--w:4.8%"><span>2.8 s</span></div></div></div>
+    <div class="bar-row"><span class="name">linstart</span><div class="bar-stack"><div class="bar b" style="width:100%">58.3 s</div><div class="bar tiny" style="--w:17.5%"><span>10.2 s</span></div></div></div>
+    <div class="bar-row"><span class="name">50 time steps</span><div class="bar-stack"><div class="bar b" style="width:68.6%">40.0 s</div><div class="bar a" style="width:33.2%">19.4 s</div></div></div>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>ifx, 50 steps, 32 threads</th><th class="r"><code style="background:none;color:inherit">nag_lapack_explicit_inverse</code></th><th class="r"><code style="background:none;color:inherit">nag_fully_tuned</code></th><th class="r">Speed-up</th></tr></thead>
+    <tbody>
+      <tr><td>Setup</td><td class="r">16.1 s</td><td class="r">2.8 s</td><td class="r">5.7&times;</td></tr>
+      <tr><td>linstart</td><td class="r">58.3 s (<code>decbt</code> 6.1 s)</td><td class="r">10.2 s (<code>decbt</code> 7.3 s)</td><td class="r">5.7&times;</td></tr>
+      <tr><td>50 time steps</td><td class="r">40.0 s (<code>solbt</code> 30.8 s)</td><td class="r">19.4 s (<code>solbt</code> 13.1 s)</td><td class="r">2.1&times;</td></tr>
+      <tr class="hi"><td>Wall time</td><td class="r">1:55</td><td class="r">0:34</td><td class="r">3.4&times;</td></tr>
+    </tbody>
+    <caption>ifx 2026.2 with MKL's Intel threading layer and <code>-xHost</code>, mean of two runs, runs within 1.3% of each other. All runs used <code>numactl --localalloc</code>; without it each step takes about 2% longer. <code>linstart</code> also gains from the parallel loops of <code>nag_fully_tuned</code>; its <code>decbt</code> is slightly slower because it also computes A&#8342;&#8315;&#185;C&#8342;.</caption>
+  </table></div>
+  <p class="prose">To build and run <code>nag_fully_tuned</code> with ifx:</p>
+<pre>source /opt/intel/oneapi/setvars.sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_Fortran_COMPILER=ifx -DCMAKE_C_COMPILER=icx \
+      -DMPI_Fortran_COMPILER=mpiifx -DFAR3D_LAPACK=MKL -DFAR3D_MKL_THREADING=intel_thread \
+      -DFAR3D_MARCH_NATIVE=ON
+ulimit -s unlimited
+OMP_NUM_THREADS=32 OMP_PROC_BIND=close OMP_PLACES=cores numactl --localalloc ./far3d.x</pre>
+</section>
+
+<section>
+  <h2><span class="num">4</span>Result accuracy</h2>
+  <div class="prose">
+    <p>The delivered branches change the solver's arithmetic in three ways: LAPACK in place of the built-in LU, explicit inverses in place of triangular solves, and a different summation order in the panel products. None of these is exact, so each branch was compared with the built-in solver, <code>nag_fix_rearrange_loop_order</code>, on the 24 text outputs of the 50-step Example run, about 830,000 numbers in total.</p>
+    <p>Each output column is a time series or radial profile of one quantity or Fourier mode. Differences are measured relative to the largest value in their column. Columns whose largest value is below 1e-3 of the largest value in the same file are reported separately: they hold modes that stay near zero, down to 1e-14 of the file maximum, where any change of rounding shows up as a large relative difference.</p>
+  </div>
+  <div class="tbl"><table>
+    <thead><tr><th>Branch</th><th class="r">vs built-in solver</th><th class="r">near-zero columns</th><th class="r">vs previous branch</th><th class="r">Run to run</th></tr></thead>
+    <tbody>
+      <tr><td><code>nag_fix_rearrange_loop_order</code></td><td class="r">reference</td><td class="r">&ndash;</td><td class="r">bit-identical*</td><td class="r">bit-identical</td></tr>
+      <tr><td><code>nag_lapack</code></td><td class="r">1.0e-8</td><td class="r">9.2e-6</td><td class="r">1.0e-8</td><td class="r">bit-identical</td></tr>
+      <tr><td><code>nag_lapack_explicit_inverse</code></td><td class="r">1.0e-8</td><td class="r">1.1e-5</td><td class="r">8.7e-9</td><td class="r">bit-identical</td></tr>
+      <tr><td><code>nag_panelized</code></td><td class="r">1.0e-8</td><td class="r">1.0e-5</td><td class="r">8.7e-9</td><td class="r">bit-identical</td></tr>
+      <tr class="hi"><td><code>nag_fully_tuned</code></td><td class="r">1.0e-8</td><td class="r">1.0e-5</td><td class="r">bit-identical</td><td class="r">bit-identical</td></tr>
+    </tbody>
+    <caption>Largest relative difference in any column, 32 threads, 50 steps, builds without <code>-march=native</code>. &ldquo;Bit-identical&rdquo; means every number is equal; the binary restart files differ only in a time stamp. * Compared with the original loop order during development.</caption>
+  </table></div>
+  <div class="prose">
+    <ul>
+      <li><strong>The move to LAPACK accounts for the whole difference.</strong> Explicit inverses and the panel solve add nothing measurable on top of it: all three MKL branches stay within 1e-8 of the built-in solver in every significant column.</li>
+      <li><strong>All branches are reproducible.</strong> Two runs of the same branch with 32 threads gave identical numbers. The panel solve and the new parallel loops use a fixed split of the work over the threads, so their summation order does not change from run to run.</li>
+      <li><strong>Parallelising the serial loops does not change results.</strong> <code>nag_fully_tuned</code> keeps the per-element summation order and matches <code>nag_panelized</code> exactly.</li>
+      <li><strong><code>-march=native</code> changes results only at the same rounding level.</strong> For each branch, the native build differs from the generic build by at most 8.3e-9 in significant columns, because AVX-512 code uses fused multiply-adds. The native builds give the same picture as the table: within 1.0e-8 of the built-in solver, <code>nag_fully_tuned</code> identical to <code>nag_panelized</code>, and reproducible from run to run.</li>
+      <li><strong>The Intel compiler gives the same accuracy.</strong> Each branch built with ifx agrees with its gfortran build to within 8.7e-9 in significant columns, and the ifx builds are also reproducible from run to run. One difference: with ifx, <code>nag_fully_tuned</code> is no longer bit-identical to <code>nag_panelized</code>, differing by up to 8.7e-9. ifx allows floating-point reassociation by default (<code>-fp-model fast</code>), so it may sum the reordered loops in a different order.</li>
+      <li><strong>The near-zero columns</strong> differ by up to 1e-5 relative to their own size. In absolute terms no difference exceeds 1e-11 of the largest value in its file.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2><span class="num">5</span>What is left</h2>
+  <div class="prose">
+    <ul>
+      <li><strong>MPI in the delivered branches.</strong> They still need an MPI library to build, even for a single-node run. Removing it, as on the development branches, would simplify building on a workstation.</li>
+      <li><strong><code>solbt</code></strong> is at about 80% of measured read bandwidth. Storing the inverses in single precision would halve the traffic, at about 1e-7 relative error per solve; that needs validation.</li>
+      <li><strong><code>decbt</code></strong> (8.4 s) is MKL <code>dgetrf</code>/<code>dgetrs</code> at m = 1023, which do not scale well to 32 threads. It runs once per run, so it matters most for short runs.</li>
+      <li><strong>Small entries in the factors.</strong> The stored factors are dense, but most entries are tiny: in the largest family only about 18% of the entries of A&#8342;&#8315;&#185;, A&#8342;&#8315;&#185;B&#8342; and A&#8342;&#8315;&#185;C&#8342; exceed 1e-12 of their block&#8217;s largest entry, and about 9% exceed 1e-10. Storing only those in a sparse format could cut <code>solbt</code>&#8217;s memory traffic several-fold. The drop tolerance would need careful validation, ideally per row rather than per block. Separately, one of the 11 variables never appears in B or C, so 1/11 of the columns of A&#8342;&#8315;&#185;B&#8342; and A&#8342;&#8315;&#185;C&#8342; are exactly zero; skipping them saves about 6% of the traffic at no accuracy cost.</li>
+      <li><strong>Accuracy on other cases.</strong> The explicit inverses were checked on the Example case only (section 4). For a new case with possibly ill-conditioned blocks, compare one run against <code>nag_lapack</code>, which keeps the LU factors.</li>
+    </ul>
+  </div>
+</section>
+
+</main></div>
+
+<footer class="foot">
+  <div class="foot-in">
+    <h2>Get in touch</h2>
+    <p>This work was done as part of nAG's code modernisation service. To discuss the results, or similar work on your own code, contact:</p>
+    <ul>
+      <li><span class="lbl">Service</span> <a href="https://nag.com/code-modernisation-services/" target="_blank" rel="noopener">nAG Code Modernisation Services</a></li>
+      <li><span class="lbl">Email</span> <a href="mailto:markus.towara@nag.co.uk">markus.towara@nag.co.uk</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script>
+(function () {
+  // static block-tridiagonal sketch
+  const g = document.getElementById('btgrid');
+  const N = 9, X = 40, Y = 20, S = 290 / N;
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (n, a) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+  const blk = (r, c, lab, fill) => {
+    g.appendChild(el('rect', { x: X + c * S + 1, y: Y + r * S + 1, width: S - 2, height: S - 2, fill, stroke: 'var(--ink)', 'stroke-width': .6 }));
+    const t = el('text', { x: X + c * S + S / 2, y: Y + r * S + S / 2 + 4, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--ink)', 'font-weight': 600 });
+    t.textContent = lab; g.appendChild(t);
+  };
+  for (let k = 0; k < N; k++) {
+    blk(k, k, 'A' + (k + 1), 'var(--blue-soft)');
+    if (k > 0) blk(k, k - 1, 'C' + (k + 1), 'var(--row-odd)');
+    if (k < N - 1) blk(k, k + 1, 'B' + (k + 1), 'var(--row-odd)');
+  }
+  for (const [r, c] of [[0, 2], [N - 1, N - 3]]) g.appendChild(el('rect', { x: X + c * S + 1, y: Y + r * S + 1, width: S - 2, height: S - 2, fill: 'none', stroke: 'var(--muted)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3' }));
+})();
+
+(function () {
+  const svg = document.getElementById('pan');
+  const NS = 'http://www.w3.org/2000/svg';
+  const el = (p, n, a, txt) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; p.appendChild(e); return e; };
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const M = 64, NB = 9;
+  const top = 46, H = 240;
+  const blkC = 30, blkA = 290, W = 240;
+  const vPrev = 560, vCur = 592, vw = 20;
+  const pX = 650, pW = 170;
+  const outX = 860;
+  let T = 8, parts = [], k = 1, sweep = 'F', phase = 0, t0 = performance.now(), playing = !reduce, frac = reduce ? 1 : 0;
+  const DUR = [1800, 700, 1500, 800];
+  const PH = [
+    '<b>1 &middot; Panel products.</b> Thread t streams columns i&#8320;:i&#8321; of A&#8342;&#8315;&#185; and of A&#8342;&#8315;&#185;C&#8342; (its own panels, on its own socket) and multiplies them by its own entries of y&#8342; and y&#8342;&#8331;&#8321;. The result is a full-length partial vector part(:, t).',
+    '<b>2 &middot; Barrier.</b> The one synchronisation point of the block row: every partial vector must be complete before anyone sums.',
+    '<b>3 &middot; Reduction.</b> Thread t adds row band i&#8320;:i&#8321; across all partial vectors and writes the new y&#8342;(i&#8320;:i&#8321;). Each thread produces exactly the entries it will read in the next row.',
+    '<b>4 &middot; Next block row.</b> The new y&#8342; becomes y&#8342;&#8331;&#8321; of row k+1. The sweep is sequential over the block rows (399 in the real system); the parallelism is all within a row.'
+  ];
+  const PHB = [
+    '<b>1 &middot; Panel products (backward sweep).</b> Thread t streams columns i&#8320;:i&#8321; of A&#8342;&#8315;&#185;B&#8342; (which <code>decbt</code> stored in place of B&#8342;) and multiplies them by its own entries of x&#8342;&#8330;&#8321;. Only one block per row, so the backward sweep reads half as much as the forward sweep.',
+    '<b>2 &middot; Barrier.</b> Every partial vector must be complete before anyone sums.',
+    '<b>3 &middot; Reduction.</b> Thread t adds row band i&#8320;:i&#8321; across all partial vectors and writes x&#8342;(i&#8320;:i&#8321;) = y&#8342;(i&#8320;:i&#8321;) &minus; sum.',
+    '<b>4 &middot; Next block row.</b> x&#8342; is the input of row k&minus;1. The backward sweep runs from row n&minus;1 down to row 1; the last row needs no backward step, since x&#8345; = y&#8345;.'
+  ];
+  const col = t => `hsl(${(212 + t * 360 / T) % 360} 62% 52%)`;
+  function panel(t) { // units of 8 rows, as in matrix.f90:panel
+    const nu = Math.ceil(M / 8); let q = Math.floor(nu / T); const r = nu % T;
+    const u0 = t * q + Math.min(t, r); if (t < r) q++;
+    return [8 * u0, Math.min(M, 8 * (u0 + q))];
+  }
+  const sy = i => top + H * i / M;
+  const sx = (x0, i) => x0 + W * i / M;
+  let dyn = {};
+  function build() {
+    svg.textContent = '';
+    parts = []; for (let t = 0; t < T; t++) parts.push(panel(t));
+    const lab = (x, y, s, o = {}) => el(svg, 'text', Object.assign({ x, y, 'font-size': 13, fill: 'var(--ink)', 'text-anchor': 'middle', 'font-weight': 600 }, o), s);
+    dyn = { stream: [], pfill: [], band: [], out: [], vin: [], cR: [] };
+    dyn.lC = lab(blkC + W / 2, top - 14, '');
+    dyn.lA = lab(blkA + W / 2, top - 14, '');
+    dyn.lPrev = lab(vPrev + vw / 2, top - 14, '');
+    dyn.lCur = lab(vCur + vw / 2, top - 14, '');
+    lab(pX + pW / 2, top - 14, 'part(:, t)');
+    dyn.lOut = lab(outX + vw / 2, top - 14, '');
+    const pw = pW / T;
+    for (let t = 0; t < T; t++) {
+      const [a, b] = parts[t];
+      for (const x0 of [blkC, blkA]) {
+        const r1 = el(svg, 'rect', { x: sx(x0, a), y: top, width: sx(x0, b) - sx(x0, a), height: H, fill: col(t), 'fill-opacity': .16 });
+        const r2 = el(svg, 'rect', { x: sx(x0, a), y: top, width: sx(x0, b) - sx(x0, a), height: 0, fill: col(t), 'fill-opacity': .62 });
+        dyn.stream.push([r2, t]);
+        if (x0 === blkC) dyn.cR.push(r1, r2);
+      }
+      for (const vx of [vPrev, vCur]) dyn.vin.push(el(svg, 'rect', { x: vx, y: sy(a), width: vw, height: sy(b) - sy(a), fill: col(t), 'fill-opacity': .75 }));
+      el(svg, 'rect', { x: pX + t * pw + 1, y: top, width: pw - 2, height: H, fill: 'none', stroke: col(t), 'stroke-width': 1 });
+      dyn.pfill.push(el(svg, 'rect', { x: pX + t * pw + 1, y: top, width: pw - 2, height: 0, fill: col(t), 'fill-opacity': .55 }));
+      dyn.band.push(el(svg, 'rect', { x: pX, y: sy(a), width: 0, height: sy(b) - sy(a), fill: col(t), 'fill-opacity': .5 }));
+      el(svg, 'rect', { x: outX, y: sy(a), width: vw, height: sy(b) - sy(a), fill: 'none', stroke: col(t), 'stroke-width': .8 });
+      dyn.out.push(el(svg, 'rect', { x: outX, y: sy(a), width: vw, height: sy(b) - sy(a), fill: col(t), 'fill-opacity': 0 }));
+      // panel owner labels
+      if (T <= 8) for (const x0 of [blkC, blkA]) {
+        const cx = (sx(x0, a) + sx(x0, b)) / 2;
+        el(svg, 'text', { x: cx, y: top + H + 15, 'font-size': 10.5, 'text-anchor': 'middle', fill: 'var(--text)' }, 't' + t);
+        el(svg, 'text', { x: cx, y: top + H + 28, 'font-size': 9.5, 'text-anchor': 'middle', fill: 'var(--muted)' }, 'S' + (t % 2));
+      }
+    }
+    // 8x8 tile grid
+    for (let i = 8; i < M; i += 8) {
+      for (const x0 of [blkC, blkA]) {
+        el(svg, 'line', { x1: sx(x0, i), x2: sx(x0, i), y1: top, y2: top + H, stroke: 'var(--sheet)', 'stroke-width': 1.2 });
+        el(svg, 'line', { x1: x0, x2: x0 + W, y1: sy(i), y2: sy(i), stroke: 'var(--sheet)', 'stroke-width': 1.2 });
+      }
+      for (const [vx, w] of [[vPrev, vw], [vCur, vw], [pX, pW], [outX, vw]]) el(svg, 'line', { x1: vx, x2: vx + w, y1: sy(i), y2: sy(i), stroke: 'var(--sheet)', 'stroke-width': 1 });
+    }
+    for (const x0 of [blkC, blkA]) el(svg, 'rect', { x: x0, y: top, width: W, height: H, fill: 'none', stroke: 'var(--ink)', 'stroke-width': 1.2 });
+    for (const vx of [vPrev, vCur, outX]) el(svg, 'rect', { x: vx, y: top, width: vw, height: H, fill: 'none', stroke: 'var(--ink)', 'stroke-width': 1 });
+    el(svg, 'text', { x: (blkC + W + blkA) / 2, y: top + H / 2 + 6, 'font-size': 18, 'text-anchor': 'middle', fill: 'var(--muted)' }, '|');
+    if (T > 8) el(svg, 'text', { x: (blkC + blkA + W) / 2, y: top + H + 20, 'font-size': 11, 'text-anchor': 'middle', fill: 'var(--muted)' }, 'panels alternate between socket 0 and socket 1');
+    // barrier
+    dyn.bar = el(svg, 'line', { x1: pX + pW + 18, x2: pX + pW + 18, y1: top - 6, y2: top + H + 6, stroke: 'var(--blue)', 'stroke-width': 3, 'stroke-dasharray': '6 5', opacity: .15 });
+    dyn.barT = el(svg, 'text', { x: pX + pW + 18, y: top + H + 22, 'font-size': 11, 'text-anchor': 'middle', fill: 'var(--blue)', 'font-weight': 600, opacity: .15 }, 'barrier');
+    // mini block-tridiagonal matrix (as in the figure of section 1) showing the current block row
+    const mX = 30, mY = 340, cs = 16;
+    el(svg, 'text', { x: mX, y: mY - 12, 'font-size': 12, fill: 'var(--muted)' }, 'Position in the matrix: the 9 block rows of the figure in section 1 (the real system has 399)');
+    dyn.mini = []; dyn.miniY = [];
+    for (let r = 0; r < NB; r++) {
+      for (const c of [r - 1, r, r + 1]) {
+        if (c < 0 || c >= NB) continue;
+        dyn.mini.push({ r, kind: c === r ? 'A' : c < r ? 'C' : 'B', rect: el(svg, 'rect', { x: mX + c * cs + 1, y: mY + r * cs + 1, width: cs - 2, height: cs - 2, fill: 'var(--row-odd)', stroke: 'var(--rule)', 'stroke-width': 1 }) });
+      }
+      dyn.miniY.push(el(svg, 'rect', { x: mX + NB * cs + 12, y: mY + r * cs + 1, width: 10, height: cs - 2, fill: 'var(--row-odd)', stroke: 'var(--rule)', 'stroke-width': 1 }));
+    }
+    for (const [r, c] of [[0, 2], [NB - 1, NB - 3]]) el(svg, 'rect', { x: mX + c * cs + 1, y: mY + r * cs + 1, width: cs - 2, height: cs - 2, fill: 'none', stroke: 'var(--muted)', 'stroke-width': 1, 'stroke-dasharray': '3 2' });
+    el(svg, 'rect', { x: mX, y: mY, width: NB * cs, height: NB * cs, fill: 'none', stroke: 'var(--muted)', 'stroke-width': 1 });
+    el(svg, 'text', { x: mX + NB * cs + 17, y: mY + NB * cs + 14, 'font-size': 11, 'text-anchor': 'middle', fill: 'var(--muted)' }, 'y');
+    const tX = mX + NB * cs + 44;
+    dyn.kT = el(svg, 'text', { x: tX, y: mY + 14, 'font-size': 15, fill: 'var(--ink)', 'font-weight': 600 }, '');
+    dyn.kT2 = el(svg, 'text', { x: tX, y: mY + 40, 'font-size': 13, fill: 'var(--text)' }, '');
+    dyn.kT3 = el(svg, 'text', { x: tX, y: mY + 62, 'font-size': 13, fill: 'var(--text)' }, '');
+    dyn.kT4 = el(svg, 'text', { x: tX, y: mY + 96, 'font-size': 12, fill: 'var(--muted)' }, '');
+  }
+  const ease = p => p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+  function draw() {
+    const p = ease(Math.min(1, frac));
+    const a = phase === 0 ? p : 1;
+    dyn.stream.forEach(([r]) => r.setAttribute('height', phase === 0 ? H * a : phase === 3 ? H * (1 - p) : H));
+    dyn.pfill.forEach(r => r.setAttribute('height', phase === 3 ? H * (1 - p) : H * a));
+    dyn.vin.forEach(r => r.setAttribute('fill-opacity', phase === 0 ? .85 : .35));
+    const bo = phase === 1 ? .35 + .65 * Math.sin(Math.PI * p) : .15;
+    dyn.bar.setAttribute('opacity', bo); dyn.barT.setAttribute('opacity', bo);
+    dyn.band.forEach(r => r.setAttribute('width', phase === 2 ? pW * p : 0));
+    dyn.out.forEach(r => r.setAttribute('fill-opacity', phase === 2 ? .8 * p : phase === 3 ? .8 * (1 - p) : 0));
+    const cur = k - 1, F = sweep === 'F';
+    dyn.mini.forEach(o => {
+      const act = o.r === cur && (F ? (o.kind === 'A' || (o.kind === 'C' && k > 1)) : o.kind === 'B');
+      const done = F ? (o.r < cur && o.kind !== 'B') : (o.kind !== 'B' || o.r > cur);
+      o.rect.setAttribute('fill', act ? 'var(--blue)' : done ? 'var(--blue-soft)' : 'var(--row-odd)');
+      o.rect.setAttribute('stroke', act ? 'var(--blue)' : 'var(--rule)');
+    });
+    dyn.miniY.forEach((r, i) => r.setAttribute('fill', i === cur ? 'var(--blue)' : !F && i > cur ? 'var(--good)' : i < cur ? 'var(--blue-soft)' : 'var(--row-odd)'));
+    const sub = d => String.fromCharCode(0x2080 + d), INV = '\u207b\u00b9';
+    const K = sub(k), K1 = sub(k - 1), Kp = sub(k + 1);
+    if (F) {
+      dyn.lC.textContent = k === 1 ? 'no C block in row 1' : `A${K}${INV}C${K}  (m \u00d7 m)`;
+      dyn.lA.textContent = `A${K}${INV}  (m \u00d7 m)`;
+      dyn.lPrev.textContent = k === 1 ? '' : `y${K1}`;
+      dyn.lCur.textContent = `y${K}`;
+      dyn.lOut.textContent = `new y${K}`;
+      dyn.kT.textContent = `Forward sweep, block row k = ${k} of ${NB}`;
+      dyn.kT2.textContent = k === 1 ? `Row 1 has no block left of the diagonal: y\u2081 \u2190 A\u2081${INV} y\u2081.` : `Dark blue: the blocks streamed in this row, A${K}${INV}C${K} and A${K}${INV}.`;
+      dyn.kT3.textContent = k === 1 ? 'Light blue will mark the block rows already solved.' : `Light blue: block rows 1\u2013${k - 1}, already solved. B blocks wait for the backward sweep.`;
+    } else {
+      dyn.lC.textContent = 'not used in the backward sweep';
+      dyn.lA.textContent = `A${K}${INV}B${K}  (m \u00d7 m)`;
+      dyn.lPrev.textContent = `y${K}`;
+      dyn.lCur.textContent = `x${Kp}`;
+      dyn.lOut.textContent = `x${K}`;
+      dyn.kT.textContent = `Backward sweep, block row k = ${k} of ${NB}`;
+      dyn.kT2.textContent = `Dark blue: A${K}${INV}B${K}, the only block streamed in this row.`;
+      dyn.kT3.textContent = `Green: x is final for block rows ${k + 1}\u2013${NB}. Light blue: done in the forward sweep.`;
+    }
+    dyn.cR.forEach(r => r.setAttribute('opacity', (F ? k === 1 : true) ? .2 : 1));
+    dyn.vin.forEach((r, i) => r.setAttribute('opacity', (i % 2 === 0 && (F ? k === 1 : phase === 0)) ? .2 : 1));
+    dyn.kT4.textContent = `${T} threads, ${parts[0][1] - parts[0][0]} columns per panel (m = ${M}; real blocks up to 1023)`;
+    document.getElementById('phase').innerHTML = (F ? PH : PHB)[phase];
+  }
+  function advance() {
+    phase = (phase + 1) % 4;
+    if (phase === 0) {
+      if (sweep === 'F') { if (k < NB) k++; else { sweep = 'B'; k = NB - 1; } }
+      else { if (k > 1) k--; else { sweep = 'F'; k = 1; } }
+    }
+    frac = 0; t0 = performance.now();
+  }
+  function tick(now) {
+    if (playing) {
+      frac = (now - t0) / DUR[phase];
+      if (frac >= 1) { advance(); frac = 0; }
+      draw();
+    }
+    requestAnimationFrame(tick);
+  }
+  const btn = document.getElementById('play');
+  btn.textContent = playing ? 'Pause' : 'Play';
+  btn.addEventListener('click', () => { playing = !playing; btn.textContent = playing ? 'Pause' : 'Play'; t0 = performance.now() - frac * DUR[phase]; });
+  document.getElementById('stepb').addEventListener('click', () => { playing = false; btn.textContent = 'Play'; if (frac < 1) frac = 1; else { advance(); frac = 1; } draw(); });
+  document.getElementById('nthr').addEventListener('change', e => { T = +e.target.value; build(); draw(); });
+  build(); draw();
+  requestAnimationFrame(tick);
+})();
+</script>
+
+</body></html>
